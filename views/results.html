@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results - BISECO Election</title>
+  <link rel="icon" type="image/png" href="/images/logo.png">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1e3a5f">
+</head>
+<body>
+  <nav>
+    <div class="container nav-inner">
+      <a href="/" class="logo">
+        <img src="/images/logo.png" alt="BISECO" style="height:45px;">
+        <span class="logo-text">BISECO<br><small>Prefectorial Election</small></span>
+      </a>
+      <button class="hamburger" aria-label="Menu" onclick="document.querySelector('.nav-links').classList.toggle('open')">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="nav-links" id="nav-links">
+        <a href="/">Home</a>
+        <span id="auth-links"></span>
+        <button class="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode"></button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="section">
+    <div class="container">
+      <div id="results-container">
+        <div class="loading-placeholder"><div class="spinner"></div><p>Loading results...</p></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-bottom">&copy; 2026 Bisease Senior High School (BISECO). All rights reserved</div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    let currentResultsElectionId = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const user = await fetchJSON('/api/auth/me');
+        setAuthLinks(user, { prefix: '' });
+      } catch(e) { setAuthLinks(null); }
+      loadResults();
+      connectWebSocket(function(data) {
+        if (data.type === 'vote_cast' && currentResultsElectionId) loadResultsData(currentResultsElectionId);
+      });
+    });
+
+    async function loadResults() {
+      try {
+        const allElections = await fetchJSON('/api/votes/all-elections');
+        const container = document.getElementById('results-container');
+        const closedElections = allElections.filter(e => e.status === 'closed');
+        if (closedElections.length === 0) {
+          container.innerHTML = '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2>No Results Yet</h2><p>Results will appear here once an election is closed.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
+          return;
+        }
+        const electionId = closedElections[0].id;
+        let selectorHtml = '<div style="display:flex;align-items:center;gap:15px;margin-bottom:30px;flex-wrap:wrap;"><h2 style="margin:0;">Election Results</h2><select id="results-election-select" onchange="loadResultsData(parseInt(this.value))" class="form-select" style="max-width:350px;">';
+        closedElections.forEach(e => {
+          selectorHtml += '<option value="' + e.id + '"' + (e.id === electionId ? ' selected' : '') + '>' + e.name + '</option>';
+        });
+        selectorHtml += '</select></div>';
+        container.innerHTML = selectorHtml + '<div id="results-content"></div>';
+        loadResultsData(electionId);
+      } catch(e) {
+        document.getElementById('results-container').innerHTML = '<p style="text-align:center;color:var(--danger);">Failed to load results.</p>';
+      }
+    }
+
+    async function loadResultsData(electionId) {
+      currentResultsElectionId = electionId;
+      const container = document.getElementById('results-content');
+      if (!container) return;
+      try {
+        const data = await fetchJSON('/api/votes/results/' + electionId);
+        const isLive = data.election.status === 'active';
+        let html = '<div class="results-header"><img src="' + (data.election.logo_url || '/images/logo.png') + '" alt="BISECO" style="height:60px;"><h2>' + data.election.name + '</h2><div class="status-badge ' + (isLive ? 'status-active' : 'status-closed') + '">' + (isLive ? 'LIVE RESULTS' : 'Final Results') + '</div><div class="results-stats"><div class="stat-mini"><strong>' + data.stats.total_votes_cast + '</strong><span>Votes Cast</span></div><div class="stat-mini"><strong>' + data.stats.total_voters + '</strong><span>Registered Voters</span></div><div class="stat-mini"><strong>' + (data.stats.total_voters > 0 ? Math.round((data.stats.total_votes_cast / data.stats.total_voters) * 100) : 0) + '%</strong><span>Turnout</span></div></div></div>';
+
+        data.results.forEach(pos => {
+          html += '<div class="results-section"><h3 class="position-title">' + pos.name + ' <small style="color:var(--text-secondary);">(' + pos.total_votes + ' votes)</small></h3>';
+          if (pos.is_single && pos.candidates.length === 1) {
+            const c = pos.candidates[0];
+            const yesCount = c.vote_count || 0;
+            const noCount = c.no_count || 0;
+            const total = yesCount + noCount;
+            const yesPct = total > 0 ? Math.round((yesCount / total) * 100) : 0;
+            const noPct = total > 0 ? 100 - yesPct : 0;
+            html += '<div class="single-result-card"><div class="single-result-candidate"><div class="result-photo"><img src="' + c.photo + '" alt="' + c.name + '"></div><div class="result-details"><div class="result-name">' + c.name + '</div></div></div><div class="yesno-result"><div class="yesno-bar"><div class="yesno-bar-yes" style="width:' + yesPct + '%"><span>' + yesCount + ' YES (' + yesPct + '%)</span></div><div class="yesno-bar-no" style="width:' + noPct + '%"><span>' + noCount + ' NO (' + noPct + '%)</span></div></div><div class="yesno-verdict ' + (yesCount > noCount ? 'approved' : 'rejected') + '">' + (total === 0 ? 'No votes yet' : (yesCount > noCount ? 'APPROVED' : (noCount > yesCount ? 'REJECTED' : 'TIED'))) + '</div></div></div>';
+          } else {
+            if (pos.candidates.length > 0) {
+              html += '<div class="chart-container"><div class="bar-chart">';
+              pos.candidates.forEach((c, i) => {
+                const pct = pos.total_votes > 0 ? Math.round((c.vote_count / pos.total_votes) * 100) : 0;
+                html += '<div class="bar-chart-row"><div class="bar-chart-label">' + c.name + '</div><div class="bar-chart-track"><div class="bar-chart-fill" style="width:' + pct + '%"><span>' + pct + '%</span></div></div></div>';
+              });
+              html += '</div></div>';
+            }
+            html += '<div class="results-candidates">';
+            pos.candidates.forEach((c, i) => {
+              const pct = pos.total_votes > 0 ? Math.round((c.vote_count / pos.total_votes) * 100) : 0;
+              const isWinner = i === 0 && c.vote_count > 0;
+              html += '<div class="result-row ' + (isWinner ? 'winner' : '') + '"><div class="result-photo"><img src="' + c.photo + '" alt="' + c.name + '"></div><div class="result-details"><div class="result-name">' + c.name + (isWinner ? ' <span class="winner-badge">Leading</span>' : '') + '</div><div class="result-bar-wrap"><div class="result-bar" style="width:' + pct + '%"></div></div><div class="result-stats-row"><span>' + c.vote_count + ' votes</span><span>' + pct + '%</span></div></div></div>';
+            });
+            html += '</div>';
+          }
+          html += '</div>';
+        });
+        container.innerHTML = html;
+      } catch(e) { container.innerHTML = '<p style="color:var(--danger);">Failed to load results.</p>'; }
+    }
+  </script>
+</body>
+</html>

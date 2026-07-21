@@ -1,0 +1,389 @@
+const express = require('express');
+const router = express.Router();
+const crypto = require('crypto');
+const db = require('../config/db');
+const multer = require('multer');
+const path = require('path');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'public', 'uploads')),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, 'candidate-' + Date.now() + '-' + Math.round(Math.random() * 1e6) + ext);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /jpeg|jpg|png|gif|webp/;
+    const ext = allowed.test(path.extname(file.originalname).toLowerCase());
+    const mime = allowed.test(file.mimetype);
+    if (ext && mime) return cb(null, true);
+    cb(new Error('Only image files allowed'));
+  }
+});
+
+const adminAuth = (req, res, next) => {
+  if (!req.session.user || req.session.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+
+function generateCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let code = '';
+  const bytes = crypto.randomBytes(8);
+  for (let i = 0; i < 8; i++) code += chars[bytes[i] % chars.length];
+  return code;
+}
+
+async function logAudit(adminId, adminCode, action, details, ip) {
+  try {
+    await db.query('INSERT INTO audit_logs (admin_id, admin_code, action, details, ip_address) VALUES (?, ?, ?, ?, ?)',
+      [adminId, adminCode, action, details || null, ip || null]);
+  } catch (e) { /* silent */ }
+}
+
+router.get('/stats', adminAuth, async (req, res) => {
+  try {
+    const [voters] = await db.query("SELECT COUNT(*) as count FROM users WHERE role = 'voter'");
+    const [voted] = await db.query("SELECT COUNT(*) as count FROM users WHERE role = 'voter' AND has_voted = 1");
+    const [elections] = await db.query('SELECT COUNT(*) as count FROM elections');
+    const [activeElections] = await db.query("SELECT COUNT(*) as count FROM elections WHERE status = 'active'");
+    const [positions] = await db.query('SELECT COUNT(*) as count FROM positions');
+    const [candidates] = await db.query('SELECT COUNT(*) as count FROM candidates');
+    const [totalVotes] = await db.query('SELECT COUNT(*) as count FROM votes');
+    res.json({
+      voters: voters[0].count, voted: voted[0].count,
+      turnout: voters[0].count > 0 ? Math.round((voted[0].count / voters[0].count) * 100) : 0,
+      elections: elections[0].count, active_elections: activeElections[0].count,
+      positions: positions[0].count, candidates: candidates[0].count, total_votes: totalVotes[0].count
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/generate-codes', adminAuth, async (req, res) => {
+  try {
+    const { count } = req.body;
+    if (!count || count < 1 || count > 1000) return res.status(400).json({ error: 'Enter a number between 1 and 1000' });
+    const codes = [];
+    for (let i = 0; i < count; i++) {
+      let code, unique = false;
+      while (!unique) {
+        code = generateCode();
+        const [exists] = await db.query('SELECT id FROM users WHERE code = ?', [code]);
+        if (exists.length === 0) unique = true;
+      }
+      await db.query('INSERT INTO users (code, role) VALUES (?, ?)', [code, 'voter']);
+      codes.push(code);
+    }
+    await logAudit(req.session.user.id, req.session.user.code, 'generate_codes', `Generated ${count} codes`, req.ip);
+    res.json({ success: true, count: codes.length, codes });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/bulk-import-codes', adminAuth, async (req, res) => {
+  try {
+    const csvData = (req.body.csvData || '').toString().trim();
+    if (!csvData) return res.status(400).json({ error: 'CSV data required' });
+    const lines = csvData.split(/\r?\n/).filter(l => l.trim());
+    const codes = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const [exists] = await db.query('SELECT id FROM users WHERE code = ?', [trimmed]);
+      if (exists.length === 0) {
+        await db.query('INSERT INTO users (code, role) VALUES (?, ?)', [trimmed, 'voter']);
+        codes.push(trimmed);
+      }
+    }
+    await logAudit(req.session.user.id, req.session.user.code, 'bulk_import', `Imported ${codes.length} codes from CSV`, req.ip);
+    res.json({ success: true, count: codes.length, codes });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/elections', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM elections ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/elections', adminAuth, async (req, res) => {
+  try {
+    const { name, description, start_date, end_date, logo_url, primary_color, secondary_color } = req.body;
+    if (!name) return res.status(400).json({ error: 'Election name is required' });
+    const [result] = await db.query(
+      'INSERT INTO elections (name, description, start_date, end_date, logo_url, primary_color, secondary_color) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name, description || null, start_date || null, end_date || null, logo_url || null, primary_color || null, secondary_color || null]
+    );
+    await logAudit(req.session.user.id, req.session.user.code, 'create_election', `Created election: ${name}`, req.ip);
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/elections/:id', adminAuth, async (req, res) => {
+  try {
+    const { name, description, start_date, end_date, logo_url, primary_color, secondary_color } = req.body;
+    await db.query(
+      'UPDATE elections SET name = COALESCE(?, name), description = COALESCE(?, description), start_date = COALESCE(?, start_date), end_date = COALESCE(?, end_date), logo_url = COALESCE(?, logo_url), primary_color = COALESCE(?, primary_color), secondary_color = COALESCE(?, secondary_color) WHERE id = ?',
+      [name, description, start_date, end_date, logo_url, primary_color, secondary_color, req.params.id]
+    );
+    await logAudit(req.session.user.id, req.session.user.code, 'update_election', `Updated election #${req.params.id}`, req.ip);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/elections/:id/status', adminAuth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['upcoming', 'active', 'closed'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    if (status === 'active') await db.query("UPDATE elections SET status = 'upcoming'");
+    await db.query('UPDATE elections SET status = ? WHERE id = ?', [status, req.params.id]);
+    const [el] = await db.query('SELECT name FROM elections WHERE id = ?', [req.params.id]);
+    await logAudit(req.session.user.id, req.session.user.code, 'election_status', `Set "${el[0]?.name}" to ${status}`, req.ip);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/elections/:id', adminAuth, async (req, res) => {
+  try {
+    const [el] = await db.query('SELECT name FROM elections WHERE id = ?', [req.params.id]);
+    await db.query('DELETE FROM elections WHERE id = ?', [req.params.id]);
+    await logAudit(req.session.user.id, req.session.user.code, 'delete_election', `Deleted election: ${el[0]?.name}`, req.ip);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/elections/:id/clone', adminAuth, async (req, res) => {
+  try {
+    const [el] = await db.query('SELECT * FROM elections WHERE id = ?', [req.params.id]);
+    if (el.length === 0) return res.status(404).json({ error: 'Election not found' });
+    const orig = el[0];
+    const [newEl] = await db.query(
+      'INSERT INTO elections (name, description, start_date, end_date, logo_url, primary_color, secondary_color) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [orig.name + ' (Copy)', orig.description, orig.start_date, orig.end_date, orig.logo_url, orig.primary_color, orig.secondary_color]
+    );
+    const newElectionId = newEl.insertId;
+    const [positions] = await db.query('SELECT * FROM positions WHERE election_id = ?', [req.params.id]);
+    for (const pos of positions) {
+      await db.query(
+        'INSERT INTO positions (election_id, name, description, sort_order) VALUES (?, ?, ?, ?)',
+        [newElectionId, pos.name, pos.description, pos.sort_order]
+      );
+    }
+    await logAudit(req.session.user.id, req.session.user.code, 'clone_election', `Cloned election #${req.params.id} to #${newElectionId}`, req.ip);
+    res.json({ success: true, id: newElectionId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/positions/:electionId', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT p.*, (SELECT COUNT(*) FROM candidates WHERE position_id = p.id) as candidate_count FROM positions p WHERE p.election_id = ? ORDER BY p.sort_order, p.id',
+      [req.params.electionId]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/positions', adminAuth, async (req, res) => {
+  try {
+    const { election_id, name, description, sort_order } = req.body;
+    if (!election_id || !name) return res.status(400).json({ error: 'Election and name are required' });
+    const [result] = await db.query(
+      'INSERT INTO positions (election_id, name, description, sort_order) VALUES (?, ?, ?, ?)',
+      [election_id, name, description || null, sort_order || 0]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/positions/:id', adminAuth, async (req, res) => {
+  try {
+    const { name, description, sort_order } = req.body;
+    await db.query(
+      'UPDATE positions SET name = COALESCE(?, name), description = COALESCE(?, description), sort_order = COALESCE(?, sort_order) WHERE id = ?',
+      [name, description, sort_order, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/positions/reorder', adminAuth, async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'Order array required' });
+    for (const item of order) {
+      await db.query('UPDATE positions SET sort_order = ? WHERE id = ?', [item.sort_order, item.id]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/positions/:id', adminAuth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM positions WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/candidates/:positionId', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM candidates WHERE position_id = ? ORDER BY sort_order, id', [req.params.positionId]);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/all-candidates/:electionId', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT c.*, p.name as position_name FROM candidates c JOIN positions p ON c.position_id = p.id WHERE p.election_id = ? ORDER BY p.sort_order, c.sort_order, c.id`,
+      [req.params.electionId]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/candidates', adminAuth, upload.single('photo'), async (req, res) => {
+  try {
+    const { position_id, name, manifesto } = req.body;
+    if (!position_id || !name) return res.status(400).json({ error: 'Position and name are required' });
+    const photo = req.file ? '/uploads/' + req.file.filename : '/images/placeholder.png';
+    const [result] = await db.query(
+      'INSERT INTO candidates (position_id, name, photo, manifesto) VALUES (?, ?, ?, ?)',
+      [position_id, name, photo, manifesto || null]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/candidates/:id', adminAuth, upload.single('photo'), async (req, res) => {
+  try {
+    const { name, manifesto } = req.body;
+    if (req.file) {
+      await db.query(
+        'UPDATE candidates SET name = COALESCE(?, name), photo = ?, manifesto = COALESCE(?, manifesto) WHERE id = ?',
+        [name, '/uploads/' + req.file.filename, manifesto, req.params.id]
+      );
+    } else {
+      await db.query(
+        'UPDATE candidates SET name = COALESCE(?, name), manifesto = COALESCE(?, manifesto) WHERE id = ?',
+        [name, manifesto, req.params.id]
+      );
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/candidates/reorder', adminAuth, async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'Order array required' });
+    for (const item of order) {
+      await db.query('UPDATE candidates SET sort_order = ? WHERE id = ?', [item.sort_order, item.id]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/candidates/:id', adminAuth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM candidates WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/voters', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT id, code, has_voted, created_at FROM users WHERE role = 'voter' ORDER BY created_at DESC");
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/voters/:id', adminAuth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM users WHERE id = ? AND role = ?', [req.params.id, 'voter']);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/voters-all', adminAuth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM users WHERE role = ?', ['voter']);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/voters/:id/access', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT election_id FROM voter_election_access WHERE voter_id = ?', [req.params.id]);
+    res.json(rows.map(r => r.election_id));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/voters/:id/access', adminAuth, async (req, res) => {
+  try {
+    const { election_ids } = req.body;
+    const voterId = req.params.id;
+    await db.query('DELETE FROM voter_election_access WHERE voter_id = ?', [voterId]);
+    if (election_ids && election_ids.length > 0) {
+      for (const elId of election_ids) {
+        await db.query('INSERT IGNORE INTO voter_election_access (voter_id, election_id) VALUES (?, ?)', [voterId, elId]);
+      }
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/vote-logs/:electionId', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT DISTINCT v.voter_hash as code, v.created_at as voted_at, GROUP_CONCAT(DISTINCT v.vote_type) as vote_types FROM votes v WHERE v.election_id = ? GROUP BY v.voter_hash, v.created_at ORDER BY v.created_at DESC`,
+      [req.params.electionId]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/export-results/:electionId', adminAuth, async (req, res) => {
+  try {
+    const [election] = await db.query('SELECT * FROM elections WHERE id = ?', [req.params.electionId]);
+    if (election.length === 0) return res.status(404).json({ error: 'Election not found' });
+    const [positions] = await db.query('SELECT * FROM positions WHERE election_id = ? ORDER BY sort_order, id', [req.params.electionId]);
+    const results = [];
+    for (const pos of positions) {
+      const [candidates] = await db.query(
+        `SELECT c.id, c.name, COUNT(v.id) as vote_count FROM candidates c LEFT JOIN votes v ON c.id = v.candidate_id AND v.election_id = ? WHERE c.position_id = ? GROUP BY c.id ORDER BY vote_count DESC`,
+        [req.params.electionId, pos.id]
+      );
+      results.push({ position: pos.name, candidates });
+    }
+    const header = ['Position', 'Candidate', 'Votes'];
+    const rows = [];
+    for (const pos of results) {
+      for (const c of pos.candidates) {
+        rows.push([pos.position, c.name, c.vote_count]);
+      }
+    }
+    res.json({ election: election[0].name, header, rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/profile', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT id, code, totp_enabled, created_at FROM users WHERE id = ?', [req.session.user.id]);
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/audit-logs', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 200');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+module.exports = router;

@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - BISECO Election</title>
+  <link rel="icon" type="image/png" href="/images/logo.png">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1e3a5f">
+</head>
+<body>
+  <nav>
+    <div class="container nav-inner">
+      <a href="/" class="logo">
+        <img src="/images/logo.png" alt="BISECO" style="height:40px;">
+        <span class="logo-text">BISECO<br><small>Admin Panel</small></span>
+      </a>
+      <button class="hamburger" aria-label="Menu" onclick="document.querySelector('.nav-links').classList.toggle('open')">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="nav-links"><a href="/">Home</a><span id="auth-links"></span><button class="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode"></button></div>
+    </div>
+  </nav>
+  <div class="admin-layout">
+    <div class="admin-sidebar">
+      <a href="#" class="active" onclick="showTab('dashboard')">Dashboard</a>
+      <a href="#" onclick="showTab('codes')">Codes</a>
+      <a href="#" onclick="showTab('elections')">Elections</a>
+      <a href="#" onclick="showTab('positions')">Positions</a>
+      <a href="#" onclick="showTab('candidates')">Candidates</a>
+      <a href="#" onclick="showTab('vote-logs')">Vote Logs</a>
+      <a href="#" onclick="showTab('results')">Results</a>
+      <a href="#" onclick="showTab('announcements')">Announcements</a>
+      <a href="#" onclick="showTab('audit-logs')">Audit Logs</a>
+      <a href="#" onclick="showTab('security')">Security</a>
+      <a href="/" style="margin-top:30px;border-top:1px solid rgba(255,255,255,0.15);padding-top:15px;">Back to Site</a>
+    </div>
+    <div class="admin-content" id="admin-content">
+      <div class="loading-placeholder"><div class="spinner"></div><p>Loading admin panel...</p></div>
+    </div>
+  </div>
+  <footer>
+    <div class="container">
+      <div class="footer-bottom">&copy; 2026 Bisease Senior High School (BISECO). All rights reserved</div>
+    </div>
+  </footer>
+  <div class="toast" id="toast"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    let currentTab = 'dashboard';
+
+    async function checkAdmin() {
+      try {
+        const u = await fetchJSON('/api/auth/me');
+        if (u.role !== 'admin') throw new Error('Not admin');
+        setAuthLinks(u, { hideAdmin: true, prefix: 'Admin: ' });
+        showTab('dashboard');
+      } catch(e) { window.location.href = '/admin/login'; }
+    }
+
+    function showTab(tab) {
+      currentTab = tab;
+      const links = document.querySelectorAll('.admin-sidebar a');
+      const tabs = ['dashboard','codes','elections','positions','candidates','vote-logs','results','announcements','audit-logs','security'];
+      const idx = tabs.indexOf(tab);
+      links.forEach(a => a.classList.remove('active'));
+      if (idx >= 0 && links[idx]) links[idx].classList.add('active');
+      showLoading('#admin-content');
+      const fn = { dashboard: loadDashboard, codes: loadCodes, elections: loadElections, positions: loadPositions, candidates: loadCandidates, 'vote-logs': loadVoteLogs, results: loadAdminResults, announcements: loadAnnouncements, 'audit-logs': loadAuditLogs, security: loadSecurity };
+      if (fn[tab]) fn[tab]();
+    }
+
+    async function loadDashboard() {
+      const s = await fetchJSON('/api/admin/stats');
+      document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Dashboard</h2><div class="stat-cards"><div class="stat-card"><div class="label">Total Codes</div><div class="value">' + s.voters + '</div></div><div class="stat-card"><div class="label">Votes Cast</div><div class="value">' + s.voted + '</div></div><div class="stat-card"><div class="label">Turnout</div><div class="value">' + s.turnout + '%</div></div><div class="stat-card"><div class="label">Elections</div><div class="value">' + s.elections + '</div></div><div class="stat-card"><div class="label">Active</div><div class="value" style="color:' + (s.active_elections > 0 ? 'var(--success)' : 'var(--gray)') + ';">' + s.active_elections + '</div></div><div class="stat-card"><div class="label">Positions</div><div class="value">' + s.positions + '</div></div><div class="stat-card"><div class="label">Candidates</div><div class="value">' + s.candidates + '</div></div><div class="stat-card"><div class="label">Total Votes</div><div class="value">' + s.total_votes + '</div></div></div>';
+    }
+
+    // CODES
+    async function loadCodes() {
+      const voters = await fetchJSON('/api/admin/voters');
+      const usedCount = voters.filter(v => v.has_voted).length;
+      document.getElementById('admin-content').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;"><h2>Voter Codes (' + voters.length + ' total, ' + usedCount + ' used, ' + (voters.length - usedCount) + ' unused)</h2><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" onclick="showGenerateCodes()">+ Generate</button><button class="btn btn-secondary btn-sm" onclick="showBulkImport()">Bulk Import</button>' + (voters.length > 0 ? '<button class="btn btn-secondary btn-sm" onclick="exportAllCodesPDF()">PDF</button><button class="btn btn-secondary btn-sm" onclick="exportAllCodesExcel()">Excel</button><button class="btn btn-outline btn-sm" onclick="printAllCodes()">Print</button><button class="btn btn-danger btn-sm" onclick="deleteAllCodes()">Delete All</button>' : '') + '</div></div><div style="margin-bottom:20px;"><input type="text" id="code-search" placeholder="Search codes..." style="width:100%;max-width:400px;padding:10px 15px;border:2px solid var(--border);border-radius:8px;font-size:1rem;background:var(--card-bg);color:var(--text);" oninput="filterCodes()"></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Code</th><th>Status</th><th>Generated</th><th>Actions</th></tr></thead><tbody id="codes-tbody">' + voters.map(v => '<tr><td><code style="font-size:1rem;font-weight:700;letter-spacing:1px;background:var(--secondary);padding:4px 10px;border-radius:4px;">' + v.code + '</code></td><td>' + (v.has_voted ? '<span style="color:var(--danger);font-weight:600;">Used</span>' : '<span style="color:var(--success);font-weight:600;">Unused</span>') + '</td><td>' + new Date(v.created_at).toLocaleDateString() + '</td><td><button class="btn btn-danger btn-sm" onclick="deleteCode(' + v.id + ')">Delete</button></td></tr>').join('') + '</tbody></table></div>';
+      window._codes = voters;
+    }
+
+    function showGenerateCodes() {
+      document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Generate Voter Codes</h2><div class="auth-card" style="max-width:600px;"><form onsubmit="generateCodes(event)"><div class="form-group"><label>Number of codes to generate</label><input type="number" id="gen-count" min="1" max="1000" placeholder="e.g. 50" required></div><p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:20px;">Each code is an 8-character case-sensitive string.</p><div style="display:flex;gap:10px;"><button type="submit" class="btn btn-primary" id="gen-btn">Generate</button><button type="button" class="btn btn-outline" onclick="loadCodes()">Cancel</button></div></form><div id="generated-codes" style="margin-top:20px;"></div></div>';
+    }
+
+    async function generateCodes(e) {
+      e.preventDefault();
+      const btn = document.getElementById('gen-btn');
+      btn.disabled = true; btn.textContent = 'Generating...';
+      try {
+        const data = await fetchJSON('/api/admin/generate-codes', { method: 'POST', body: JSON.stringify({ count: parseInt(document.getElementById('gen-count').value) }) });
+        window._lastGeneratedCodes = data.codes;
+        const codesHtml = data.codes.map(c => '<code style="display:inline-block;padding:6px 14px;margin:4px;background:var(--secondary);border-radius:6px;font-size:1rem;font-weight:700;letter-spacing:1px;">' + c + '</code>').join('');
+        document.getElementById('generated-codes').innerHTML = '<div style="margin-top:15px;"><strong style="color:var(--success);">' + data.count + ' codes generated!</strong></div><div style="margin-top:15px;padding:20px;background:var(--light);border-radius:8px;max-height:300px;overflow-y:auto;">' + codesHtml + '</div><div style="margin-top:15px;display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="copyCodes()">Copy All</button><button class="btn btn-secondary btn-sm" onclick="exportCodesPDF()">PDF</button><button class="btn btn-secondary btn-sm" onclick="exportCodesExcel()">Excel</button><button class="btn btn-outline btn-sm" onclick="printCodes()">Print</button><button class="btn btn-outline btn-sm" onclick="loadCodes()">Back</button></div>';
+        btn.textContent = 'Done!';
+      } catch(err) { toast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Generate'; }
+    }
+
+    function showBulkImport() {
+      document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Bulk Import Codes</h2><div class="auth-card" style="max-width:600px;"><form onsubmit="bulkImport(event)"><div class="form-group"><label>Paste CSV codes (one per line)</label><textarea id="csv-data" rows="10" placeholder="Ab3xK9mQ\nCd4yL8nR\n..." style="font-family:monospace;"></textarea></div><p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:20px;">Paste one code per line. Duplicates will be skipped.</p><div style="display:flex;gap:10px;"><button type="submit" class="btn btn-primary" id="import-btn">Import</button><button type="button" class="btn btn-outline" onclick="loadCodes()">Cancel</button></div></form></div>';
+    }
+
+    async function bulkImport(e) {
+      e.preventDefault();
+      const textarea = document.getElementById('csv-data');
+      if (!textarea) { toast('Textarea not found. Please refresh.', 'error'); return; }
+      const val = (textarea.value || '').trim();
+      if (!val) { toast('Please paste or type at least one code.', 'error'); return; }
+      const btn = document.getElementById('import-btn');
+      btn.disabled = true; btn.textContent = 'Importing...';
+      try {
+        const data = await fetchJSON('/api/admin/bulk-import-codes', { method: 'POST', body: JSON.stringify({ csvData: val }) });
+        toast(data.count + ' codes imported!', 'success');
+        loadCodes();
+      } catch(err) { toast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Import'; }
+    }
+
+    function copyCodes() { navigator.clipboard.writeText(window._lastGeneratedCodes.join('\n')).then(() => toast('Copied!', 'success')); }
+
+    function exportCodesPDF() { var codes = window._lastGeneratedCodes; if (!codes) return; var jsPDF = window.jspdf.jsPDF; var doc = new jsPDF(); doc.setFontSize(16); doc.text('BISECO Voter Codes', 105, 20, { align: 'center' }); doc.setFontSize(10); doc.text('Generated: ' + new Date().toLocaleString() + ' | Total: ' + codes.length, 105, 28, { align: 'center' }); var y = 40; codes.forEach(function(c, i) { if (y > 270) { doc.addPage(); y = 20; } doc.setFont('courier', 'bold'); doc.setFontSize(10); doc.text(c, 22, y); y += 10; }); doc.save('biseco-codes-' + Date.now() + '.pdf'); toast('PDF exported!', 'success'); }
+
+    function exportCodesExcel() { var codes = window._lastGeneratedCodes; if (!codes) return; var ws = XLSX.utils.aoa_to_sheet([['BISECO Voter Codes'], [], ['#', 'Code', 'Status']].concat(codes.map(function(c, i) { return [i + 1, c, 'Unused']; }))); var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Codes'); XLSX.writeFile(wb, 'biseco-codes-' + Date.now() + '.xlsx'); toast('Excel exported!', 'success'); }
+
+    function printCodes() { var codes = window._lastGeneratedCodes; if (!codes) return; var w = window.open('', '_blank'); w.document.write('<html><head><title>BISECO Codes</title><style>body{font-family:Arial;text-align:center;padding:30px;}table{margin:20px auto;border-collapse:collapse;}td{padding:8px 16px;border:1px solid #e2e8f0;font-family:monospace;font-weight:bold;letter-spacing:2px;background:#f5e6c8;}</style></head><body><h1 style="color:#1e3a5f;">BISECO Voter Codes</h1><p>Generated: ' + new Date().toLocaleString() + ' | Total: ' + codes.length + '</p><table>'); var cols = 4; for (var i = 0; i < codes.length; i++) { if (i % cols === 0) w.document.write('<tr>'); w.document.write('<td>' + codes[i] + '</td>'); if (i % cols === cols - 1 || i === codes.length - 1) { for (var j = (i % cols); j < cols - 1; j++) w.document.write('<td></td>'); w.document.write('</tr>'); } } w.document.write('</table><p style="color:#64748b;font-size:12px;">Each code can only be used once.</p></body></html>'); w.document.close(); setTimeout(function() { w.print(); }, 500); }
+
+    function exportAllCodesPDF() { if (!window._codes) return; exportAllCodesPDFInner(window._codes); }
+    function exportAllCodesPDFInner(allCodes) { var jsPDF = window.jspdf.jsPDF; var doc = new jsPDF(); doc.setFontSize(16); doc.text('BISECO All Voter Codes', 105, 20, { align: 'center' }); var used = allCodes.filter(function(v) { return v.has_voted; }).length; doc.setFontSize(10); doc.text('Total: ' + allCodes.length + ' | Used: ' + used + ' | Unused: ' + (allCodes.length - used), 105, 28, { align: 'center' }); var y = 40; allCodes.forEach(function(v, i) { if (y > 270) { doc.addPage(); y = 20; } doc.setFont('courier', 'bold'); doc.setFontSize(10); doc.setTextColor(v.has_voted ? 150 : 0); doc.text(v.code + (v.has_voted ? ' [USED]' : ''), 22, y); y += 10; }); doc.setTextColor(0); doc.save('biseco-all-codes-' + Date.now() + '.pdf'); toast('PDF exported!', 'success'); }
+
+    function exportAllCodesExcel() { if (!window._codes) return; var ws = XLSX.utils.aoa_to_sheet([['BISECO All Voter Codes'], [], ['#', 'Code', 'Status', 'Date']].concat(window._codes.map(function(v, i) { return [i + 1, v.code, v.has_voted ? 'Used' : 'Unused', new Date(v.created_at).toLocaleDateString()]; }))); var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'All Codes'); XLSX.writeFile(wb, 'biseco-all-codes-' + Date.now() + '.xlsx'); toast('Excel exported!', 'success'); }
+
+    function printAllCodes() { if (!window._codes) return; var used = window._codes.filter(function(v) { return v.has_voted; }).length; var w = window.open('', '_blank'); w.document.write('<html><head><title>BISECO All Codes</title><style>body{font-family:Arial;text-align:center;padding:30px;}table{margin:20px auto;border-collapse:collapse;}td{padding:8px 16px;border:1px solid #e2e8f0;font-family:monospace;font-weight:bold;letter-spacing:2px;}.unused{background:#f5e6c8;}.used{background:#f0f0f0;color:#999;text-decoration:line-through;}</style></head><body><h1 style="color:#1e3a5f;">All Voter Codes</h1><p>Total: ' + window._codes.length + ' | Used: ' + used + ' | Unused: ' + (window._codes.length - used) + '</p><table>'); var cols = 4; for (var i = 0; i < window._codes.length; i++) { if (i % cols === 0) w.document.write('<tr>'); var cls = window._codes[i].has_voted ? 'used' : 'unused'; w.document.write('<td class="' + cls + '">' + window._codes[i].code + (window._codes[i].has_voted ? ' [USED]' : '') + '</td>'); if (i % cols === cols - 1 || i === window._codes.length - 1) { for (var j = (i % cols); j < cols - 1; j++) w.document.write('<td></td>'); w.document.write('</tr>'); } } w.document.write('</table></body></html>'); w.document.close(); setTimeout(function() { w.print(); }, 500); }
+
+    function filterCodes() { var q = document.getElementById('code-search').value.toLowerCase(); var filtered = window._codes.filter(function(v) { return v.code.toLowerCase().includes(q); }); document.getElementById('codes-tbody').innerHTML = filtered.map(function(v) { return '<tr><td><code style="font-size:1rem;font-weight:700;letter-spacing:1px;background:var(--secondary);padding:4px 10px;border-radius:4px;">' + v.code + '</code></td><td>' + (v.has_voted ? '<span style="color:var(--danger);font-weight:600;">Used</span>' : '<span style="color:var(--success);font-weight:600;">Unused</span>') + '</td><td>' + new Date(v.created_at).toLocaleDateString() + '</td><td><button class="btn btn-outline btn-sm" onclick="manageVoterAccess(' + v.id + ',\'' + v.code + '\')">Access</button> <button class="btn btn-danger btn-sm" onclick="deleteCode(' + v.id + ')">Delete</button></td></tr>'; }).join(''); }
+
+    async function manageVoterAccess(voterId, voterCode) {
+      var elections = await fetchJSON('/api/admin/elections');
+      var access = await fetchJSON('/api/admin/voters/' + voterId + '/access');
+      var html = '<h2 style="margin-bottom:25px;">Manage Access: <code>' + voterCode + '</code></h2><div class="auth-card" style="max-width:600px;text-align:left;"><p style="color:var(--text-secondary);margin-bottom:15px;">Restrict which elections this voter can access. If no elections are selected, they can vote in ALL elections.</p>';
+      elections.forEach(function(e) { var checked = access.includes(e.id) ? 'checked' : ''; html += '<div style="padding:10px 0;border-bottom:1px solid var(--border);"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" class="access-check" value="' + e.id + '" ' + checked + '><strong>' + e.name + '</strong> <span class="status-badge status-' + e.status + '" style="font-size:0.7rem;">' + e.status.toUpperCase() + '</span></label></div>'; });
+      html += '<div style="display:flex;gap:10px;margin-top:20px;"><button class="btn btn-primary" onclick="saveVoterAccess(' + voterId + ')">Save Access</button><button class="btn btn-outline" onclick="loadCodes()">Cancel</button></div></div>';
+      document.getElementById('admin-content').innerHTML = html;
+    }
+
+    async function saveVoterAccess(voterId) {
+      var checks = document.querySelectorAll('.access-check');
+      var ids = [];
+      checks.forEach(function(c) { if (c.checked) ids.push(parseInt(c.value)); });
+      await fetchJSON('/api/admin/voters/' + voterId + '/access', { method: 'POST', body: JSON.stringify({ election_ids: ids }) });
+      toast('Access updated!', 'success');
+      loadCodes();
+    }
+    async function deleteCode(id) { if (!confirm('Delete?')) return; await fetchJSON('/api/admin/voters/' + id, { method: 'DELETE' }); toast('Deleted', 'success'); loadCodes(); }
+    async function deleteAllCodes() { if (!confirm('DELETE ALL codes? This cannot be undone.')) return; if (!confirm('Are you absolutely sure?')) return; await fetchJSON('/api/admin/voters-all', { method: 'DELETE' }); toast('All deleted', 'success'); loadCodes(); }
+
+    // ELECTIONS
+    async function loadElections() {
+      const elections = await fetchJSON('/api/admin/elections');
+      document.getElementById('admin-content').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;"><h2>Elections</h2><button class="btn btn-primary" onclick="showAddElection()">+ New Election</button></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Start</th><th>End</th><th>Actions</th></tr></thead><tbody>' + elections.map(function(e) { return '<tr><td>' + e.id + '</td><td><strong>' + e.name + '</strong>' + (e.description ? '<br><small style="color:var(--text-secondary);">' + e.description + '</small>' : '') + '</td><td><span class="status-badge status-' + e.status + '">' + e.status.toUpperCase() + '</span></td><td>' + (e.start_date ? new Date(e.start_date).toLocaleDateString() : '-') + '</td><td>' + (e.end_date ? new Date(e.end_date).toLocaleDateString() : '-') + '</td><td style="white-space:nowrap;">' + (e.status !== 'active' ? '<button class="btn btn-primary btn-sm" onclick="setElectionStatus(' + e.id + ',\'active\')">Activate</button> ' : '') + (e.status !== 'closed' ? '<button class="btn btn-secondary btn-sm" onclick="setElectionStatus(' + e.id + ',\'closed\')">Close</button> ' : '') + (e.status !== 'upcoming' ? '<button class="btn btn-outline btn-sm" onclick="setElectionStatus(' + e.id + ',\'upcoming\')">Set Upcoming</button> ' : '') + '<button class="btn btn-outline btn-sm" onclick="cloneElection(' + e.id + ')">Clone</button> <button class="btn btn-danger btn-sm" onclick="deleteElection(' + e.id + ')">Delete</button></td></tr>'; }).join('') + '</tbody></table></div>';
+    }
+
+    function showAddElection() {
+      document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Create Election</h2><div class="auth-card" style="max-width:600px;text-align:left;"><form onsubmit="createElection(event)"><div class="form-group"><label>Name</label><input type="text" id="el-name" placeholder="e.g. 2026 Prefectorial Election" required></div><div class="form-group"><label>Description</label><textarea id="el-desc" rows="3" placeholder="Optional"></textarea></div><div class="form-group"><label>Start Date</label><input type="datetime-local" id="el-start"></div><div class="form-group"><label>End Date</label><input type="datetime-local" id="el-end"></div><div class="form-group"><label>Custom Logo URL</label><input type="text" id="el-logo" placeholder="https://..."></div><div class="form-group"><label>Primary Color</label><input type="color" id="el-primary" value="#1e3a5f"></div><div class="form-group"><label>Secondary Color</label><input type="color" id="el-secondary" value="#d4a843"></div><div style="display:flex;gap:10px;"><button type="submit" class="btn btn-primary">Create</button><button type="button" class="btn btn-outline" onclick="loadElections()">Cancel</button></div></form></div>';
+    }
+
+    async function createElection(e) {
+      e.preventDefault();
+      try {
+        await fetchJSON('/api/admin/elections', { method: 'POST', body: JSON.stringify({ name: document.getElementById('el-name').value, description: document.getElementById('el-desc').value, start_date: document.getElementById('el-start').value || null, end_date: document.getElementById('el-end').value || null, logo_url: document.getElementById('el-logo').value || null, primary_color: document.getElementById('el-primary').value, secondary_color: document.getElementById('el-secondary').value }) });
+        toast('Election created!', 'success'); loadElections();
+      } catch(err) { toast(err.message, 'error'); }
+    }
+
+    async function setElectionStatus(id, status) { await fetchJSON('/api/admin/elections/' + id + '/status', { method: 'PUT', body: JSON.stringify({ status }) }); toast('Status updated!', 'success'); loadElections(); }
+    async function cloneElection(id) { if (!confirm('Clone this election?')) return; await fetchJSON('/api/admin/elections/' + id + '/clone', { method: 'POST' }); toast('Election cloned!', 'success'); loadElections(); }
+    async function deleteElection(id) { if (!confirm('Delete this election and ALL its data?')) return; await fetchJSON('/api/admin/elections/' + id, { method: 'DELETE' }); toast('Deleted', 'success'); loadElections(); }
+
+    // POSITIONS
+    async function loadPositions() {
+      const elections = await fetchJSON('/api/admin/elections');
+      if (elections.length === 0) { document.getElementById('admin-content').innerHTML = '<h2>Positions</h2><p style="margin-top:20px;">No elections yet. Create an election first.</p>'; return; }
+      let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;"><h2>Positions</h2><div style="display:flex;gap:10px;align-items:center;"><select id="pos-election-select" onchange="loadPositionsForElection()" class="form-select">';
+      elections.forEach(function(e, i) { html += '<option value="' + e.id + '"' + (i === 0 ? ' selected' : '') + '>' + e.name + '</option>'; });
+      html += '</select><button class="btn btn-primary" onclick="showAddPosition()">+ Add Position</button></div></div><div id="positions-list"></div>';
+      document.getElementById('admin-content').innerHTML = html;
+      loadPositionsForElection();
+    }
+
+    async function loadPositionsForElection() {
+      var electionId = document.getElementById('pos-election-select').value;
+      var positions = await fetchJSON('/api/admin/positions/' + electionId);
+      var list = document.getElementById('positions-list');
+      if (positions.length === 0) { list.innerHTML = '<p>No positions for this election.</p>'; return; }
+      list.innerHTML = '<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Order</th><th>Name</th><th>Description</th><th>Candidates</th><th>Actions</th></tr></thead><tbody>' + positions.map(function(p) { return '<tr><td><input type="number" value="' + p.sort_order + '" style="width:60px;padding:5px;border:2px solid var(--border);border-radius:5px;text-align:center;background:var(--card-bg);color:var(--text);" onchange="updatePositionOrder(' + p.id + ', this.value)"></td><td><strong>' + p.name + '</strong></td><td>' + (p.description || '-') + '</td><td>' + p.candidate_count + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="editPosition(' + p.id + ',\'' + p.name.replace(/'/g, "\\'") + '\',\'' + (p.description || '').replace(/'/g, "\\'") + '\')">Edit</button> <button class="btn btn-danger btn-sm" onclick="deletePosition(' + p.id + ')">Delete</button></td></tr>'; }).join('') + '</tbody></table></div>';
+    }
+
+    function showAddPosition() { var eid = document.getElementById('pos-election-select').value; document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Add Position</h2><div class="auth-card" style="max-width:600px;text-align:left;"><form onsubmit="createPosition(event,' + eid + ')"><div class="form-group"><label>Name</label><input type="text" id="pos-name" placeholder="e.g. Head Prefect" required></div><div class="form-group"><label>Description</label><textarea id="pos-desc" rows="3"></textarea></div><div class="form-group"><label>Sort Order</label><input type="number" id="pos-order" value="0"></div><div style="display:flex;gap:10px;"><button type="submit" class="btn btn-primary">Add</button><button type="button" class="btn btn-outline" onclick="loadPositions()">Cancel</button></div></form></div>'; }
+    async function createPosition(e, eid) { e.preventDefault(); await fetchJSON('/api/admin/positions', { method: 'POST', body: JSON.stringify({ election_id: eid, name: document.getElementById('pos-name').value, description: document.getElementById('pos-desc').value, sort_order: parseInt(document.getElementById('pos-order').value) || 0 }) }); toast('Position added!', 'success'); loadPositions(); }
+    function editPosition(id, name, desc) { document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Edit Position</h2><div class="auth-card" style="max-width:600px;text-align:left;"><form onsubmit="updatePosition(event,' + id + ')"><div class="form-group"><label>Name</label><input type="text" id="pos-name" value="' + name + '" required></div><div class="form-group"><label>Description</label><textarea id="pos-desc" rows="3">' + desc + '</textarea></div><div style="display:flex;gap:10px;"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn btn-outline" onclick="loadPositions()">Cancel</button></div></form></div>'; }
+    async function updatePosition(e, id) { e.preventDefault(); await fetchJSON('/api/admin/positions/' + id, { method: 'PUT', body: JSON.stringify({ name: document.getElementById('pos-name').value, description: document.getElementById('pos-desc').value }) }); toast('Updated!', 'success'); loadPositions(); }
+    async function updatePositionOrder(id, order) { await fetchJSON('/api/admin/positions/' + id, { method: 'PUT', body: JSON.stringify({ sort_order: parseInt(order) }) }); toast('Order updated', 'success'); }
+    async function deletePosition(id) { if (!confirm('Delete this position and all candidates?')) return; await fetchJSON('/api/admin/positions/' + id, { method: 'DELETE' }); toast('Deleted', 'success'); loadPositions(); }
+
+    // CANDIDATES
+    async function loadCandidates() {
+      var elections = await fetchJSON('/api/admin/elections');
+      if (elections.length === 0) { document.getElementById('admin-content').innerHTML = '<h2>Candidates</h2><p>No elections yet.</p>'; return; }
+      var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;"><h2>Candidates</h2><div style="display:flex;gap:10px;align-items:center;"><select id="cand-election-select" onchange="loadCandidatesForElection()" class="form-select">';
+      elections.forEach(function(e, i) { html += '<option value="' + e.id + '"' + (i === 0 ? ' selected' : '') + '>' + e.name + '</option>'; });
+      html += '</select><button class="btn btn-primary" onclick="showAddCandidate()">+ Add Candidate</button></div></div><div id="candidates-list"></div>';
+      document.getElementById('admin-content').innerHTML = html;
+      loadCandidatesForElection();
+    }
+
+    async function loadCandidatesForElection() {
+      var electionId = document.getElementById('cand-election-select').value;
+      var candidates = await fetchJSON('/api/admin/all-candidates/' + electionId);
+      var list = document.getElementById('candidates-list');
+      if (candidates.length === 0) { list.innerHTML = '<p>No candidates for this election.</p>'; return; }
+      list.innerHTML = '<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Order</th><th>Photo</th><th>Name</th><th>Position</th><th>Manifesto</th><th>Actions</th></tr></thead><tbody>' + candidates.map(function(c, i) { return '<tr><td><input type="number" value="' + (c.sort_order || 0) + '" style="width:50px;padding:4px;border:2px solid var(--border);border-radius:4px;text-align:center;background:var(--card-bg);color:var(--text);" onchange="updateCandidateOrder(' + c.id + ', this.value)"></td><td><img src="' + c.photo + '" style="width:45px;height:45px;border-radius:50%;object-fit:cover;"></td><td><strong>' + c.name + '</strong></td><td>' + c.position_name + '</td><td><small>' + (c.manifesto || '-').substring(0, 60) + '</small></td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="editCandidate(' + c.id + ')">Edit</button> <button class="btn btn-danger btn-sm" onclick="deleteCandidate(' + c.id + ')">Delete</button></td></tr>'; }).join('') + '</tbody></table></div>';
+    }
+
+    async function showAddCandidate() { var eid = document.getElementById('cand-election-select').value; var positions = await fetchJSON('/api/admin/positions/' + eid); if (positions.length === 0) { toast('Add positions first', 'error'); return; } document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Add Candidate</h2><div class="auth-card" style="max-width:600px;text-align:left;"><form onsubmit="createCandidate(event)" enctype="multipart/form-data"><div class="form-group"><label>Position</label><select id="cand-position" required>' + positions.map(function(p) { return '<option value="' + p.id + '">' + p.name + '</option>'; }).join('') + '</select></div><div class="form-group"><label>Name</label><input type="text" id="cand-name" required></div><div class="form-group"><label>Photo</label><input type="file" id="cand-photo" accept="image/*"></div><div class="form-group"><label>Manifesto</label><textarea id="cand-manifesto" rows="5"></textarea></div><div style="display:flex;gap:10px;"><button type="submit" class="btn btn-primary">Add</button><button type="button" class="btn btn-outline" onclick="loadCandidates()">Cancel</button></div></form></div>'; }
+    async function createCandidate(e) { e.preventDefault(); var fd = new FormData(); fd.append('position_id', document.getElementById('cand-position').value); fd.append('name', document.getElementById('cand-name').value); fd.append('manifesto', document.getElementById('cand-manifesto').value); var p = document.getElementById('cand-photo').files[0]; if (p) fd.append('photo', p); var token = localStorage.getItem('csrfToken'); var res = await fetch('/api/admin/candidates', { method: 'POST', body: fd, headers: token ? { 'X-CSRF-Token': token } : {} }); var data = await res.json(); if (!res.ok) { toast(data.error, 'error'); return; } toast('Candidate added!', 'success'); loadCandidates(); }
+
+    async function editCandidate(id) { var c = await fetchJSON('/api/votes/candidate/' + id); document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Edit Candidate</h2><div class="auth-card" style="max-width:600px;text-align:left;"><div style="text-align:center;margin-bottom:20px;"><img src="' + c.photo + '" style="width:100px;height:100px;border-radius:50%;object-fit:cover;"></div><form onsubmit="updateCandidate(event,' + c.id + ')" enctype="multipart/form-data"><div class="form-group"><label>Name</label><input type="text" id="cand-name" value="' + c.name + '" required></div><div class="form-group"><label>New Photo</label><input type="file" id="cand-photo" accept="image/*"></div><div class="form-group"><label>Manifesto</label><textarea id="cand-manifesto" rows="5">' + (c.manifesto || '') + '</textarea></div><div style="display:flex;gap:10px;"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn btn-outline" onclick="loadCandidates()">Cancel</button></div></form></div>'; }
+    async function updateCandidate(e, id) { e.preventDefault(); var fd = new FormData(); fd.append('name', document.getElementById('cand-name').value); fd.append('manifesto', document.getElementById('cand-manifesto').value); var p = document.getElementById('cand-photo').files[0]; if (p) fd.append('photo', p); var token = localStorage.getItem('csrfToken'); var res = await fetch('/api/admin/candidates/' + id, { method: 'PUT', body: fd, headers: token ? { 'X-CSRF-Token': token } : {} }); var data = await res.json(); if (!res.ok) { toast(data.error, 'error'); return; } toast('Updated!', 'success'); loadCandidates(); }
+    async function updateCandidateOrder(id, order) { await fetchJSON('/api/admin/candidates/reorder', { method: 'PUT', body: JSON.stringify({ order: [{ id: id, sort_order: parseInt(order) }] }) }); toast('Order updated', 'success'); }
+    async function deleteCandidate(id) { if (!confirm('Delete?')) return; await fetchJSON('/api/admin/candidates/' + id, { method: 'DELETE' }); toast('Deleted', 'success'); loadCandidates(); }
+
+    // VOTE LOGS
+    async function loadVoteLogs() {
+      var elections = await fetchJSON('/api/admin/elections');
+      if (elections.length === 0) { document.getElementById('admin-content').innerHTML = '<h2>Vote Logs</h2><p>No elections yet.</p>'; return; }
+      var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;"><h2>Vote Logs</h2><select id="log-election-select" onchange="loadLogsForElection()" class="form-select" style="max-width:300px;">';
+      elections.forEach(function(e, i) { html += '<option value="' + e.id + '"' + (i === 0 ? ' selected' : '') + '>' + e.name + '</option>'; });
+      html += '</select></div><p style="color:var(--text-secondary);margin-bottom:15px;">Shows which codes voted (NOT who they voted for - anonymous)</p><div id="vote-logs-list"></div>';
+      document.getElementById('admin-content').innerHTML = html;
+      loadLogsForElection();
+    }
+
+    async function loadLogsForElection() { var id = document.getElementById('log-election-select').value; var logs = await fetchJSON('/api/admin/vote-logs/' + id); var list = document.getElementById('vote-logs-list'); if (logs.length === 0) { list.innerHTML = '<p>No votes cast yet.</p>'; return; } list.innerHTML = '<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Code</th><th>Voted At</th></tr></thead><tbody>' + logs.map(function(l) { return '<tr><td><code style="font-weight:700;letter-spacing:1px;background:var(--secondary);padding:4px 10px;border-radius:4px;">' + l.code + '</code></td><td>' + new Date(l.voted_at).toLocaleString() + '</td></tr>'; }).join('') + '</tbody></table></div>'; }
+
+    // RESULTS
+    async function loadAdminResults() {
+      var elections = await fetchJSON('/api/admin/elections');
+      if (elections.length === 0) { document.getElementById('admin-content').innerHTML = '<h2>Results</h2><p>No elections yet.</p>'; return; }
+      var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;"><h2>Election Results</h2><div style="display:flex;gap:10px;align-items:center;"><select id="res-election-select" onchange="loadResultsForElection()" class="form-select" style="max-width:300px;">';
+      elections.forEach(function(e, i) { html += '<option value="' + e.id + '"' + (i === 0 ? ' selected' : '') + '>' + e.name + '</option>'; });
+      html += '</select><button class="btn btn-secondary btn-sm" onclick="exportResultsPDF()">Export PDF</button><button class="btn btn-secondary btn-sm" onclick="exportResultsExcel()">Export Excel</button></div></div><div id="results-content"></div>';
+      document.getElementById('admin-content').innerHTML = html;
+      loadResultsForElection();
+    }
+
+    async function loadResultsForElection() {
+      var electionId = document.getElementById('res-election-select').value;
+      var container = document.getElementById('results-content');
+      try {
+        var data = await fetchJSON('/api/votes/results/' + electionId);
+        var html = '<div class="stat-cards" style="margin-bottom:30px;"><div class="stat-card"><div class="label">Total Codes</div><div class="value">' + data.stats.total_voters + '</div></div><div class="stat-card"><div class="label">Votes Cast</div><div class="value">' + data.stats.total_votes_cast + '</div></div><div class="stat-card"><div class="label">Turnout</div><div class="value">' + (data.stats.total_voters > 0 ? Math.round((data.stats.total_votes_cast / data.stats.total_voters) * 100) : 0) + '%</div></div></div>';
+        data.results.forEach(function(pos) {
+          html += '<div class="results-section"><h3 class="position-title">' + pos.name + ' <small style="color:var(--text-secondary);">(' + pos.total_votes + ' votes)</small></h3>';
+          if (pos.is_single && pos.candidates.length === 1) {
+            var c = pos.candidates[0];
+            var yesCount = c.vote_count || 0;
+            var noCount = c.no_count || 0;
+            var total = yesCount + noCount;
+            var yesPct = total > 0 ? Math.round((yesCount / total) * 100) : 0;
+            var noPct = total > 0 ? 100 - yesPct : 0;
+            html += '<div class="single-result-card"><div class="single-result-candidate"><div class="result-photo"><img src="' + c.photo + '"></div><div class="result-details"><div class="result-name">' + c.name + '</div></div></div><div class="yesno-result"><div class="yesno-bar"><div class="yesno-bar-yes" style="width:' + yesPct + '%"><span>' + yesCount + ' YES (' + yesPct + '%)</span></div><div class="yesno-bar-no" style="width:' + noPct + '%"><span>' + noCount + ' NO (' + noPct + '%)</span></div></div><div class="yesno-verdict ' + (yesCount > noCount ? 'approved' : 'rejected') + '">' + (total === 0 ? 'No votes yet' : (yesCount > noCount ? 'APPROVED' : (noCount > yesCount ? 'REJECTED' : 'TIED'))) + '</div></div></div>';
+          } else {
+            if (pos.candidates.length > 0) {
+              html += '<div class="chart-container"><div class="bar-chart">';
+              pos.candidates.forEach(function(c) { var pct = pos.total_votes > 0 ? Math.round((c.vote_count / pos.total_votes) * 100) : 0; html += '<div class="bar-chart-row"><div class="bar-chart-label">' + c.name + '</div><div class="bar-chart-track"><div class="bar-chart-fill" style="width:' + pct + '%"><span>' + pct + '%</span></div></div></div>'; });
+              html += '</div></div>';
+            }
+            html += '<div class="results-candidates">';
+            pos.candidates.forEach(function(c, i) { var pct = pos.total_votes > 0 ? Math.round((c.vote_count / pos.total_votes) * 100) : 0; var isW = i === 0 && c.vote_count > 0; html += '<div class="result-row ' + (isW ? 'winner' : '') + '"><div class="result-photo"><img src="' + c.photo + '"></div><div class="result-details"><div class="result-name">' + c.name + (isW ? ' <span class="winner-badge">Leading</span>' : '') + '</div><div class="result-bar-wrap"><div class="result-bar" style="width:' + pct + '%"></div></div><div class="result-stats-row"><span>' + c.vote_count + ' votes</span><span>' + pct + '%</span></div></div></div>'; });
+            html += '</div>';
+          }
+          html += '</div>';
+        });
+        container.innerHTML = html;
+      } catch(e) { container.innerHTML = '<p style="color:var(--danger);">Failed to load results.</p>'; }
+    }
+
+    async function exportResultsPDF() { var id = document.getElementById('res-election-select').value; var data = await fetchJSON('/api/votes/results/' + id); var jsPDF = window.jspdf.jsPDF; var doc = new jsPDF(); doc.setFontSize(16); doc.text('BISECO - ' + data.election.name, 105, 20, { align: 'center' }); doc.setFontSize(10); doc.text('Votes: ' + data.stats.total_votes_cast + ' | Voters: ' + data.stats.total_voters, 105, 28, { align: 'center' }); var y = 40; data.results.forEach(function(pos) { doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.text(pos.name, 20, y); y += 8; if (pos.is_single && pos.candidates.length === 1) { var c = pos.candidates[0]; var yesCount = c.vote_count || 0; var noCount = c.no_count || 0; var total = yesCount + noCount; doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.text(c.name + ': YES ' + yesCount + ' | NO ' + noCount + (total > 0 ? ' (' + (yesCount > noCount ? 'APPROVED' : (noCount > yesCount ? 'REJECTED' : 'TIED')) + ')' : ''), 25, y); y += 7; } else { pos.candidates.forEach(function(c) { var pct = pos.total_votes > 0 ? Math.round((c.vote_count / pos.total_votes) * 100) : 0; doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.text(c.name + ': ' + c.vote_count + ' votes (' + pct + '%)', 25, y); y += 7; }); } y += 5; }); doc.save('biseco-results-' + id + '.pdf'); toast('PDF exported!', 'success'); }
+
+    async function exportResultsExcel() { var id = document.getElementById('res-election-select').value; var data = await fetchJSON('/api/votes/results/' + id); var rows = [['BISECO Results - ' + data.election.name], [], ['Position', 'Candidate', 'Votes', 'YES', 'NO', 'Percentage']]; data.results.forEach(function(pos) { if (pos.is_single && pos.candidates.length === 1) { var c = pos.candidates[0]; rows.push([pos.name, c.name, c.vote_count + c.no_count, c.vote_count, c.no_count, 'YES/NO']); } else { pos.candidates.forEach(function(c) { var pct = pos.total_votes > 0 ? Math.round((c.vote_count / pos.total_votes) * 100) : 0; rows.push([pos.name, c.name, c.vote_count, '-', '-', pct + '%']); }); } }); var ws = XLSX.utils.aoa_to_sheet(rows); var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Results'); XLSX.writeFile(wb, 'biseco-results-' + id + '.xlsx'); toast('Excel exported!', 'success'); }
+
+    // ANNOUNCEMENTS
+    async function loadAnnouncements() {
+      var items = await fetchJSON('/api/announcements');
+      document.getElementById('admin-content').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;"><h2>Announcements</h2><button class="btn btn-primary" onclick="showAddAnnouncement()">+ New Announcement</button></div>' + (items.length === 0 ? '<p>No announcements yet.</p>' : '<div class="announcement-list">' + items.map(function(a) { return '<div class="announcement-item ' + a.priority + '"><div style="display:flex;justify-content:space-between;align-items:start;"><div><h4>' + a.title + '</h4><p>' + (a.content || '') + '</p><small>' + a.priority.toUpperCase() + ' | ' + (a.is_active ? 'Active' : 'Inactive') + ' | ' + new Date(a.created_at).toLocaleDateString() + '</small></div><div style="display:flex;gap:5px;"><button class="btn btn-outline btn-sm" onclick="toggleAnnouncement(' + a.id + ',' + (a.is_active ? '0' : '1') + ')">' + (a.is_active ? 'Hide' : 'Show') + '</button><button class="btn btn-danger btn-sm" onclick="deleteAnnouncement(' + a.id + ')">Delete</button></div></div></div>'; }).join('') + '</div>');
+    }
+
+    function showAddAnnouncement() { document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">New Announcement</h2><div class="auth-card" style="max-width:600px;text-align:left;"><form onsubmit="createAnnouncement(event)"><div class="form-group"><label>Title</label><input type="text" id="ann-title" required></div><div class="form-group"><label>Content</label><textarea id="ann-content" rows="3"></textarea></div><div class="form-group"><label>Priority</label><select id="ann-priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></div><div style="display:flex;gap:10px;"><button type="submit" class="btn btn-primary">Create</button><button type="button" class="btn btn-outline" onclick="loadAnnouncements()">Cancel</button></div></form></div>'; }
+    async function createAnnouncement(e) { e.preventDefault(); await fetchJSON('/api/announcements', { method: 'POST', body: JSON.stringify({ title: document.getElementById('ann-title').value, content: document.getElementById('ann-content').value, priority: document.getElementById('ann-priority').value }) }); toast('Created!', 'success'); loadAnnouncements(); }
+    async function toggleAnnouncement(id, active) { await fetchJSON('/api/announcements/' + id, { method: 'PUT', body: JSON.stringify({ is_active: parseInt(active) }) }); toast('Updated', 'success'); loadAnnouncements(); }
+    async function deleteAnnouncement(id) { if (!confirm('Delete?')) return; await fetchJSON('/api/announcements/' + id, { method: 'DELETE' }); toast('Deleted', 'success'); loadAnnouncements(); }
+
+    // AUDIT LOGS
+    async function loadAuditLogs() {
+      var logs = await fetchJSON('/api/admin/audit-logs');
+      document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Audit Logs</h2>' + (logs.length === 0 ? '<p>No audit logs yet.</p>' : '<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Date</th><th>Admin</th><th>Action</th><th>Details</th><th>IP</th></tr></thead><tbody>' + logs.map(function(l) { return '<tr><td>' + new Date(l.created_at).toLocaleString() + '</td><td><code>' + l.admin_code + '</code></td><td><strong>' + l.action + '</strong></td><td>' + (l.details || '-') + '</td><td>' + (l.ip_address || '-') + '</td></tr>'; }).join('') + '</tbody></table></div>');
+    }
+
+    // SECURITY
+    async function loadSecurity() {
+      try {
+        var profile = await fetchJSON('/api/admin/profile');
+        document.getElementById('admin-content').innerHTML = '<h2 style="margin-bottom:25px;">Security Settings</h2>' +
+          '<div class="auth-card" style="max-width:600px;text-align:left;margin-bottom:25px;"><h3 style="color:var(--primary);margin-bottom:15px;">Change Password</h3><form onsubmit="changePassword(event)"><div class="form-group"><label>Current Password</label><div class="pw-group"><input type="password" id="cur-pw" required><button type="button" class="pw-toggle" onclick="togglePassword(\'cur-pw\')">&#128065;</button></div></div><div class="form-group"><label>New Password</label><div class="pw-group"><input type="password" id="new-pw" minlength="6" required><button type="button" class="pw-toggle" onclick="togglePassword(\'new-pw\')">&#128065;</button></div></div><div class="form-group"><label>Confirm New Password</label><div class="pw-group"><input type="password" id="confirm-pw" minlength="6" required><button type="button" class="pw-toggle" onclick="togglePassword(\'confirm-pw\')">&#128065;</button></div></div><button type="submit" class="btn btn-primary">Change Password</button></form></div>' +
+          '<div class="auth-card" style="max-width:600px;text-align:left;"><h3 style="color:var(--primary);margin-bottom:15px;">Two-Factor Authentication (2FA)</h3><p style="color:var(--text-secondary);margin-bottom:15px;">Status: <strong style="color:' + (profile.totp_enabled ? 'var(--success)' : 'var(--danger)') + ';">' + (profile.totp_enabled ? 'Enabled' : 'Disabled') + '</strong></p>' + (profile.totp_enabled ? '<button class="btn btn-danger" onclick="disable2FA()">Disable 2FA</button>' : '<a href="/admin/2fa-setup" class="btn btn-primary">Setup 2FA</a>') + '</div>';
+      } catch(err) {
+        document.getElementById('admin-content').innerHTML = '<h2>Security Settings</h2><p style="color:var(--danger);">Failed to load security settings: ' + err.message + '</p>';
+      }
+    }
+
+    async function changePassword(e) {
+      e.preventDefault();
+      var npw = document.getElementById('new-pw').value;
+      var cpw = document.getElementById('confirm-pw').value;
+      if (npw !== cpw) { toast('Passwords do not match', 'error'); return; }
+      try {
+        await fetchJSON('/api/auth/admin/change-password', { method: 'POST', body: JSON.stringify({ currentPassword: document.getElementById('cur-pw').value, newPassword: npw }) });
+        toast('Password changed!', 'success');
+        document.getElementById('cur-pw').value = '';
+        document.getElementById('new-pw').value = '';
+        document.getElementById('confirm-pw').value = '';
+      } catch(err) { toast(err.message, 'error'); }
+    }
+
+    async function disable2FA() {
+      var pw = prompt('Enter your password to disable 2FA:');
+      if (!pw) return;
+      try {
+        await fetchJSON('/api/auth/admin/2fa-disable', { method: 'POST', body: JSON.stringify({ password: pw }) });
+        toast('2FA disabled', 'success');
+        loadSecurity();
+      } catch(err) { toast(err.message, 'error'); }
+    }
+
+    checkAdmin();
+  </script>
+</body>
+</html>
