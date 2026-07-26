@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/images/logo.png">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1e3a5f">
+  <meta name="theme-color" content="#0044cc">
 </head>
 <body>
   <nav>
@@ -79,7 +79,7 @@
       try {
         const data = await fetchJSON('/api/auth/admin/2fa-setup', { method: 'POST' });
         document.getElementById('qr-container').innerHTML = `<img src="${data.qrCode}" alt="QR Code" style="max-width:220px;border-radius:12px;box-shadow:var(--shadow);">`;
-        document.getElementById('manual-secret').innerHTML = `<p style="color:var(--gray);font-size:0.85rem;">Or enter this key manually:<br><code style="font-weight:700;letter-spacing:2px;background:var(--secondary);padding:4px 10px;border-radius:4px;">${data.secret}</code></p>`;
+        document.getElementById('manual-secret').innerHTML = '<p style="color:var(--gray);font-size:0.85rem;">Scan the QR code above with your authenticator app.</p>';
       } catch(err) {
         document.getElementById('qr-container').innerHTML = '<p style="color:red;">Failed to load QR code</p>';
       }

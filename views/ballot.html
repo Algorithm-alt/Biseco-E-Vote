@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/images/logo.png">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1e3a5f">
+  <meta name="theme-color" content="#0044cc">
 </head>
 <body>
   <nav>
@@ -74,17 +74,17 @@
 
     function renderBallot() {
       const container = document.getElementById('ballot-container');
-      let html = '<div class="ballot-header"><img src="' + (activeElection.logo_url || '/images/logo.png') + '" alt="BISECO" style="height:60px;"><h2>' + activeElection.name + '</h2><p>Select a candidate for each position you wish to vote on. You may skip any position. Single-candidate positions require a YES or NO vote.</p><div id="ballot-countdown"></div><div class="ballot-progress"><span id="progress-text">0</span>/' + positions.filter(p => p.candidates.length > 0).length + ' positions selected</div></div>';
+      let html = '<div class="ballot-header"><img src="' + escapeHtml(activeElection.logo_url || '/images/logo.png') + '" alt="BISECO" style="height:60px;"><h2>' + escapeHtml(activeElection.name) + '</h2><p>Select a candidate for each position you wish to vote on. You may skip any position. Single-candidate positions require a YES or NO vote.</p><div id="ballot-countdown"></div><div class="ballot-progress"><span id="progress-text">0</span>/' + positions.filter(p => p.candidates.length > 0).length + ' positions selected</div></div>';
 
       positions.forEach(pos => {
-        html += '<div class="position-section"><h3 class="position-title">' + pos.name + '</h3>' + (pos.description ? '<p class="position-desc">' + pos.description + '</p>' : '');
+        html += '<div class="position-section"><h3 class="position-title">' + escapeHtml(pos.name) + '</h3>' + (pos.description ? '<p class="position-desc">' + escapeHtml(pos.description) + '</p>' : '');
         if (pos.candidates.length === 1) {
           const c = pos.candidates[0];
-          html += '<div class="single-candidate-card"><div class="candidate-photo"><img src="' + c.photo + '" alt="' + c.name + '"></div><div class="candidate-info"><h4>' + c.name + '</h4>' + (c.manifesto ? '<p class="manifesto-preview">' + c.manifesto.substring(0, 120) + (c.manifesto.length > 120 ? '...' : '') + '</p>' : '') + '<span class="candidate-detail-btn" onclick="showCandidateDetail(' + c.id + ')">View Full Profile</span></div></div><div class="yesno-buttons" id="yesno-' + pos.id + '"><button class="btn btn-yes" id="yes-' + pos.id + '" onclick="selectYesNo(' + pos.id + ',' + c.id + ',\'yes\')">YES</button><button class="btn btn-no" id="no-' + pos.id + '" onclick="selectYesNo(' + pos.id + ',' + c.id + ',\'no\')">NO</button></div>';
+          html += '<div class="single-candidate-card"><div class="candidate-photo"><img src="' + escapeHtml(c.photo) + '" alt="' + escapeHtml(c.name) + '"></div><div class="candidate-info"><h4>' + escapeHtml(c.name) + '</h4>' + (c.manifesto ? '<p class="manifesto-preview">' + escapeHtml(c.manifesto.substring(0, 120)) + (c.manifesto.length > 120 ? '...' : '') + '</p>' : '') + '<span class="candidate-detail-btn" onclick="showCandidateDetail(' + c.id + ')">View Full Profile</span></div></div><div class="yesno-buttons" id="yesno-' + pos.id + '"><button class="btn btn-yes" id="yes-' + pos.id + '" onclick="selectYesNo(' + pos.id + ',' + c.id + ',\'yes\')">YES</button><button class="btn btn-no" id="no-' + pos.id + '" onclick="selectYesNo(' + pos.id + ',' + c.id + ',\'no\')">NO</button></div>';
         } else {
           html += '<div class="candidates-grid">';
           pos.candidates.forEach(c => {
-            html += '<div class="candidate-card" id="candidate-' + pos.id + '-' + c.id + '" onclick="selectCandidate(' + pos.id + ',' + c.id + ')"><div class="candidate-photo"><img src="' + c.photo + '" alt="' + c.name + '"></div><div class="candidate-info"><h4>' + c.name + '</h4>' + (c.manifesto ? '<p class="manifesto-preview">' + c.manifesto.substring(0, 120) + (c.manifesto.length > 120 ? '...' : '') + '</p>' : '') + '<span class="candidate-detail-btn" onclick="event.stopPropagation();showCandidateDetail(' + c.id + ')">View Full Profile</span></div><div class="check-mark">&#10003;</div></div>';
+            html += '<div class="candidate-card" id="candidate-' + pos.id + '-' + c.id + '" onclick="selectCandidate(' + pos.id + ',' + c.id + ')"><div class="candidate-photo"><img src="' + escapeHtml(c.photo) + '" alt="' + escapeHtml(c.name) + '"></div><div class="candidate-info"><h4>' + escapeHtml(c.name) + '</h4>' + (c.manifesto ? '<p class="manifesto-preview">' + escapeHtml(c.manifesto.substring(0, 120)) + (c.manifesto.length > 120 ? '...' : '') + '</p>' : '') + '<span class="candidate-detail-btn" onclick="event.stopPropagation();showCandidateDetail(' + c.id + ')">View Full Profile</span></div><div class="check-mark">&#10003;</div></div>';
           });
           if (pos.candidates.length === 0) html += '<p style="color:var(--text-secondary);padding:20px;">No candidates yet for this position.</p>';
           html += '</div>';

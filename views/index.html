@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/images/logo.png">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1e3a5f">
+  <meta name="theme-color" content="#0044cc">
 </head>
 <body>
   <div id="announcement-banner"></div>
@@ -134,7 +134,7 @@
         const banner = document.getElementById('announcement-banner');
         if (items.length > 0) {
           const a = items[0];
-          banner.innerHTML = '<div class="announcement-banner ' + a.priority + '"><strong>' + a.title + '</strong>' + (a.content ? ' - ' + a.content : '') + '<button onclick="this.parentElement.remove()">&times;</button></div>';
+          banner.innerHTML = '<div class="announcement-banner ' + escapeHtml(a.priority) + '"><strong>' + escapeHtml(a.title) + '</strong>' + (a.content ? ' - ' + escapeHtml(a.content) : '') + '<button onclick="this.parentElement.remove()">&times;</button></div>';
         }
       } catch(e) {}
     }
@@ -152,7 +152,7 @@
           if (countdownInterval) clearInterval(countdownInterval);
           return;
         }
-        el.innerHTML = '<div class="status-badge status-active">Election Active</div><h2 style="margin-top:15px;">' + election.name + '</h2>' + (election.description ? '<p>' + election.description + '</p>' : '');
+        el.innerHTML = '<div class="status-badge status-active">Election Active</div><h2 style="margin-top:15px;">' + escapeHtml(election.name) + '</h2>' + (election.description ? '<p>' + escapeHtml(election.description) + '</p>' : '');
 
         if (election.end_date) {
           startCountdown(new Date(election.end_date), cdEl);

@@ -1,5 +1,15 @@
 const API = '';
 
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function toast(msg, type = '') {
   const t = document.getElementById('toast');
   if (!t) return;
@@ -9,23 +19,18 @@ function toast(msg, type = '') {
 }
 
 async function fetchJSON(url, opts = {}) {
-  let token = localStorage.getItem('csrfToken');
-  if (!token && opts.method && opts.method !== 'GET') {
-    try { const t = await fetch(API + '/api/csrf-token'); const d = await t.json(); token = d.token; localStorage.setItem('csrfToken', token); } catch(e) {}
-  }
+  let token = null;
+  try {
+    const t = await fetch(API + '/api/csrf-token', { credentials: 'same-origin' });
+    const d = await t.json();
+    token = d.token;
+  } catch(e) {}
   const headers = { 'Content-Type': 'application/json', ...opts.headers };
   if (token) headers['X-CSRF-Token'] = token;
-  const res = await fetch(API + url, { ...opts, headers });
+  const res = await fetch(API + url, { ...opts, headers, credentials: 'same-origin' });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
-}
-
-async function fetchCSRF() {
-  try {
-    const data = await fetchJSON('/api/csrf-token');
-    localStorage.setItem('csrfToken', data.token);
-  } catch (e) { /* silent */ }
 }
 
 function showLoading(selector) {
@@ -35,7 +40,6 @@ function showLoading(selector) {
 
 async function logout() {
   await fetchJSON('/api/auth/logout', { method: 'POST' });
-  localStorage.removeItem('csrfToken');
   window.location.href = '/';
 }
 
@@ -50,7 +54,7 @@ function setAuthLinks(u, opts) {
   var prefix = opts.prefix || '';
   var label = u.role === 'admin' ? 'Admin' : 'Voter';
   var adminLink = (u.role === 'admin' && !opts.hideAdmin) ? ' <a href="/admin">Admin</a>' : '';
-  el.innerHTML = '<span style="opacity:0.8;">' + prefix + label + '</span> <a href="#" onclick="logout()" class="btn btn-sm btn-outline" style="color:white;border-color:rgba(255,255,255,0.4);">Logout</span>' + adminLink;
+  el.innerHTML = '<span style="opacity:0.8;">' + escapeHtml(prefix + label) + '</span> <a href="#" onclick="logout()" class="btn btn-sm btn-outline" style="color:white;border-color:rgba(255,255,255,0.4);">Logout</a>' + adminLink;
 }
 
 function toggleDark() {
@@ -101,10 +105,10 @@ async function showCandidateDetail(candidateId) {
   try {
     const c = await fetchJSON('/api/votes/candidate/' + candidateId);
     showModal(`
-      <h2>${c.name}</h2>
-      <p style="color:var(--text-secondary);margin-bottom:15px;">${c.position_name}</p>
-      <div class="candidate-photo-large"><img src="${c.photo}" alt="${c.name}"></div>
-      ${c.manifesto ? '<div class="manifesto-full">' + c.manifesto + '</div>' : '<p style="color:var(--gray);font-style:italic;">No manifesto provided.</p>'}
+      <h2>${escapeHtml(c.name)}</h2>
+      <p style="color:var(--text-secondary);margin-bottom:15px;">${escapeHtml(c.position_name)}</p>
+      <div class="candidate-photo-large"><img src="${escapeHtml(c.photo)}" alt="${escapeHtml(c.name)}"></div>
+      ${c.manifesto ? '<div class="manifesto-full">' + escapeHtml(c.manifesto) + '</div>' : '<p style="color:var(--gray);font-style:italic;">No manifesto provided.</p>'}
     `);
   } catch (err) { toast('Failed to load candidate details', 'error'); }
 }
@@ -115,7 +119,9 @@ function closeModalOnEsc() {
 
 function togglePassword(id) {
   var input = document.getElementById(id);
+  if (!input) return;
   var btn = input.nextElementSibling;
+  if (!btn) return;
   if (input.type === 'password') {
     input.type = 'text';
     btn.textContent = '\u{1F441}';
@@ -127,7 +133,6 @@ function togglePassword(id) {
 
 document.addEventListener('DOMContentLoaded', function() {
   loadTheme();
-  fetchCSRF();
   closeModalOnEsc();
   var nav = document.querySelector('.nav-inner');
   if (nav) {

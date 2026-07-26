@@ -1,5 +1,5 @@
-const CACHE_NAME = 'biseco-vote-v1';
-const PRECACHE_URLS = ['/', '/css/style.css', '/js/app.js', '/manifest.json'];
+const CACHE_NAME = 'biseco-vote-v2';
+const PRECACHE_URLS = ['/css/style.css', '/js/app.js', '/manifest.json', '/images/logo.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -16,8 +16,28 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  if (event.request.url.includes('/api/')) return;
+  if (event.request.url.includes('/api/') || event.request.method !== 'GET') return;
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
+    caches.match(event.request).then(cached => {
+      return fetch(event.request).then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => cached);
+    })
   );
 });

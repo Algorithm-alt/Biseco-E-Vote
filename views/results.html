@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/images/logo.png">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1e3a5f">
+  <meta name="theme-color" content="#0044cc">
 </head>
 <body>
   <nav>
@@ -62,14 +62,19 @@
         const allElections = await fetchJSON('/api/votes/all-elections');
         const container = document.getElementById('results-container');
         const closedElections = allElections.filter(e => e.status === 'closed');
-        if (closedElections.length === 0) {
-          container.innerHTML = '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2>No Results Yet</h2><p>Results will appear here once an election is closed.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
+        const publishedElections = closedElections.filter(e => e.results_published);
+        if (publishedElections.length === 0) {
+          if (closedElections.length > 0) {
+            container.innerHTML = '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2>Results Not Published</h2><p>The results for this election have not been published yet. Please wait for the administrator to publish them.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
+          } else {
+            container.innerHTML = '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2>No Results Yet</h2><p>Results will appear here once an election is closed.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
+          }
           return;
         }
-        const electionId = closedElections[0].id;
+        const electionId = publishedElections[0].id;
         let selectorHtml = '<div style="display:flex;align-items:center;gap:15px;margin-bottom:30px;flex-wrap:wrap;"><h2 style="margin:0;">Election Results</h2><select id="results-election-select" onchange="loadResultsData(parseInt(this.value))" class="form-select" style="max-width:350px;">';
-        closedElections.forEach(e => {
-          selectorHtml += '<option value="' + e.id + '"' + (e.id === electionId ? ' selected' : '') + '>' + e.name + '</option>';
+        publishedElections.forEach(e => {
+          selectorHtml += '<option value="' + e.id + '"' + (e.id === electionId ? ' selected' : '') + '>' + escapeHtml(e.name) + '</option>';
         });
         selectorHtml += '</select></div>';
         container.innerHTML = selectorHtml + '<div id="results-content"></div>';
@@ -86,10 +91,10 @@
       try {
         const data = await fetchJSON('/api/votes/results/' + electionId);
         const isLive = data.election.status === 'active';
-        let html = '<div class="results-header"><img src="' + (data.election.logo_url || '/images/logo.png') + '" alt="BISECO" style="height:60px;"><h2>' + data.election.name + '</h2><div class="status-badge ' + (isLive ? 'status-active' : 'status-closed') + '">' + (isLive ? 'LIVE RESULTS' : 'Final Results') + '</div><div class="results-stats"><div class="stat-mini"><strong>' + data.stats.total_votes_cast + '</strong><span>Votes Cast</span></div><div class="stat-mini"><strong>' + data.stats.total_voters + '</strong><span>Registered Voters</span></div><div class="stat-mini"><strong>' + (data.stats.total_voters > 0 ? Math.round((data.stats.total_votes_cast / data.stats.total_voters) * 100) : 0) + '%</strong><span>Turnout</span></div></div></div>';
+        let html = '<div class="results-header"><img src="' + escapeHtml(data.election.logo_url || '/images/logo.png') + '" alt="BISECO" style="height:60px;"><h2>' + escapeHtml(data.election.name) + '</h2><div class="status-badge ' + (isLive ? 'status-active' : 'status-closed') + '">' + (isLive ? 'LIVE RESULTS' : 'Final Results') + '</div><div class="results-stats"><div class="stat-mini"><strong>' + data.stats.total_votes_cast + '</strong><span>Votes Cast</span></div><div class="stat-mini"><strong>' + data.stats.total_voters + '</strong><span>Registered Voters</span></div><div class="stat-mini"><strong>' + (data.stats.total_voters > 0 ? Math.round((data.stats.total_votes_cast / data.stats.total_voters) * 100) : 0) + '%</strong><span>Turnout</span></div></div></div>';
 
         data.results.forEach(pos => {
-          html += '<div class="results-section"><h3 class="position-title">' + pos.name + ' <small style="color:var(--text-secondary);">(' + pos.total_votes + ' votes)</small></h3>';
+          html += '<div class="results-section"><h3 class="position-title">' + escapeHtml(pos.name) + ' <small style="color:var(--text-secondary);">(' + pos.total_votes + ' votes)</small></h3>';
           if (pos.is_single && pos.candidates.length === 1) {
             const c = pos.candidates[0];
             const yesCount = c.vote_count || 0;
@@ -97,13 +102,13 @@
             const total = yesCount + noCount;
             const yesPct = total > 0 ? Math.round((yesCount / total) * 100) : 0;
             const noPct = total > 0 ? 100 - yesPct : 0;
-            html += '<div class="single-result-card"><div class="single-result-candidate"><div class="result-photo"><img src="' + c.photo + '" alt="' + c.name + '"></div><div class="result-details"><div class="result-name">' + c.name + '</div></div></div><div class="yesno-result"><div class="yesno-bar"><div class="yesno-bar-yes" style="width:' + yesPct + '%"><span>' + yesCount + ' YES (' + yesPct + '%)</span></div><div class="yesno-bar-no" style="width:' + noPct + '%"><span>' + noCount + ' NO (' + noPct + '%)</span></div></div><div class="yesno-verdict ' + (yesCount > noCount ? 'approved' : 'rejected') + '">' + (total === 0 ? 'No votes yet' : (yesCount > noCount ? 'APPROVED' : (noCount > yesCount ? 'REJECTED' : 'TIED'))) + '</div></div></div>';
+            html += '<div class="single-result-card"><div class="single-result-candidate"><div class="result-photo"><img src="' + escapeHtml(c.photo) + '" alt="' + escapeHtml(c.name) + '"></div><div class="result-details"><div class="result-name">' + escapeHtml(c.name) + '</div></div></div><div class="yesno-result"><div class="yesno-bar"><div class="yesno-bar-yes" style="width:' + yesPct + '%"><span>' + yesCount + ' YES (' + yesPct + '%)</span></div><div class="yesno-bar-no" style="width:' + noPct + '%"><span>' + noCount + ' NO (' + noPct + '%)</span></div></div><div class="yesno-verdict ' + (yesCount > noCount ? 'approved' : 'rejected') + '">' + (total === 0 ? 'No votes yet' : (yesCount > noCount ? 'APPROVED' : (noCount > yesCount ? 'REJECTED' : 'TIED'))) + '</div></div></div>';
           } else {
             if (pos.candidates.length > 0) {
               html += '<div class="chart-container"><div class="bar-chart">';
               pos.candidates.forEach((c, i) => {
                 const pct = pos.total_votes > 0 ? Math.round((c.vote_count / pos.total_votes) * 100) : 0;
-                html += '<div class="bar-chart-row"><div class="bar-chart-label">' + c.name + '</div><div class="bar-chart-track"><div class="bar-chart-fill" style="width:' + pct + '%"><span>' + pct + '%</span></div></div></div>';
+                html += '<div class="bar-chart-row"><div class="bar-chart-label">' + escapeHtml(c.name) + '</div><div class="bar-chart-track"><div class="bar-chart-fill" style="width:' + pct + '%"><span>' + pct + '%</span></div></div></div>';
               });
               html += '</div></div>';
             }
@@ -111,7 +116,7 @@
             pos.candidates.forEach((c, i) => {
               const pct = pos.total_votes > 0 ? Math.round((c.vote_count / pos.total_votes) * 100) : 0;
               const isWinner = i === 0 && c.vote_count > 0;
-              html += '<div class="result-row ' + (isWinner ? 'winner' : '') + '"><div class="result-photo"><img src="' + c.photo + '" alt="' + c.name + '"></div><div class="result-details"><div class="result-name">' + c.name + (isWinner ? ' <span class="winner-badge">Leading</span>' : '') + '</div><div class="result-bar-wrap"><div class="result-bar" style="width:' + pct + '%"></div></div><div class="result-stats-row"><span>' + c.vote_count + ' votes</span><span>' + pct + '%</span></div></div></div>';
+              html += '<div class="result-row ' + (isWinner ? 'winner' : '') + '"><div class="result-photo"><img src="' + escapeHtml(c.photo) + '" alt="' + escapeHtml(c.name) + '"></div><div class="result-details"><div class="result-name">' + escapeHtml(c.name) + (isWinner ? ' <span class="winner-badge">Leading</span>' : '') + '</div><div class="result-bar-wrap"><div class="result-bar" style="width:' + pct + '%"></div></div><div class="result-stats-row"><span>' + c.vote_count + ' votes</span><span>' + pct + '%</span></div></div></div>';
             });
             html += '</div>';
           }
