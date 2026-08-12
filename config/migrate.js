@@ -230,17 +230,17 @@ async function runMigrations() {
   }
 }
 
-async function createAdminUser(adminPassword) {
+async function createAdminUser(adminPassword, adminCode = null) {
   const bcrypt = require('bcryptjs');
   const { generateCode } = require('../utils');
   const hashedPassword = await bcrypt.hash(adminPassword, 10);
-  const adminCode = generateCode(8);
+  const code = adminCode || generateCode(8);
   await db.query('INSERT INTO users (code, password, role) VALUES (?, ?, ?)', [
-    adminCode,
+    code,
     hashedPassword,
     'admin',
   ]);
-  return adminCode;
+  return code;
 }
 
 async function autoSetup() {
@@ -257,8 +257,9 @@ async function autoSetup() {
     await createTables();
 
     const adminPassword = process.env.ADMIN_PASSWORD;
+    const adminCode = process.env.ADMIN_CODE;
     if (adminPassword) {
-      await createAdminUser(adminPassword);
+      await createAdminUser(adminPassword, adminCode);
     }
   } catch (err) {
     console.error('Auto-setup error:', err.message);
