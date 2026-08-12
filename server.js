@@ -254,8 +254,6 @@ function csrfProtect(req, res, next) {
   next();
 }
 
-app.use('/api', csrfProtect);
-
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/votes', require('./routes/votes'));
 app.use('/api/admin', require('./routes/admin'));
