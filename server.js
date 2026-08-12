@@ -270,6 +270,17 @@ app.get('/health', async (req, res) => {
   }
 });
 
+app.post('/api/setup', async (req, res) => {
+  try {
+    const { autoSetup } = require('./config/migrate');
+    await autoSetup();
+    res.json({ success: true, message: 'Database setup completed' });
+  } catch (err) {
+    console.error('Manual setup failed:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'views/index.html')));
 app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'views/login.html')));
 app.get('/admin/login', (req, res) => res.sendFile(path.join(__dirname, 'views/admin-login.html')));
