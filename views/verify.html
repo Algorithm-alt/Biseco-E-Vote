@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verify Your Vote - BISECO Election</title>
+    <link rel="icon" type="image/png" href="/images/logo.png" />
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0044cc" />
+  </head>
+  <body>
+    <nav>
+      <div class="container nav-inner">
+        <a href="/" class="logo">
+          <img src="/images/logo.png" alt="BISECO" style="height: 45px" />
+          <span class="logo-text">BISECO<br /><small>Prefectorial Election</small></span>
+        </a>
+        <div class="nav-links">
+          <a href="/">Home</a>
+          <button class="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode"></button>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section">
+      <div class="container">
+        <div class="auth-card">
+          <img src="/images/logo.png" alt="BISECO" class="auth-logo" />
+          <h2>Verify a Vote</h2>
+          <p class="auth-subtitle">
+            Enter the receipt shown after you voted to confirm it was recorded correctly.
+          </p>
+          <form id="verify-form" onsubmit="handleVerify(event)">
+            <div class="form-group">
+              <label for="receipt">Receipt Code</label>
+              <input type="text" id="receipt" placeholder="Paste your receipt here" required />
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="verify-btn">
+              Verify Receipt
+            </button>
+          </form>
+          <div id="verify-result" style="margin-top: 20px"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="container">
+        <div class="footer-bottom">
+          &copy; 2026 Bisease Senior High School (BISECO). All rights reserved
+        </div>
+      </div>
+    </footer>
+
+    <div class="toast" id="toast"></div>
+    <script src="/js/app.js"></script>
+    <script>
+      async function handleVerify(e) {
+        e.preventDefault();
+        const hash = document.getElementById('receipt').value.trim();
+        if (!/^[a-f0-9]+$/i.test(hash)) {
+          toast('Invalid receipt format', 'error');
+          return;
+        }
+        const btn = document.getElementById('verify-btn');
+        const resultEl = document.getElementById('verify-result');
+        btn.disabled = true;
+        btn.textContent = 'Verifying...';
+        try {
+          const res = await fetch('/api/votes/verify-receipt/' + encodeURIComponent(hash), {
+            credentials: 'same-origin',
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Verification failed');
+          resultEl.innerHTML =
+            '<div class="status-badge status-voted" style="margin-bottom:15px;">&#10003; Vote Verified</div><div style="text-align:left;background:var(--card-bg, rgba(0,0,0,0.05));border:1px solid var(--border, rgba(0,0,0,0.1));border-radius:8px;padding:14px;"><p><strong>Election:</strong> ' +
+            escapeHtml(data.election) +
+            '</p><p><strong>Position:</strong> ' +
+            escapeHtml(data.position) +
+            '</p><p><strong>Candidate:</strong> ' +
+            escapeHtml(data.candidate) +
+            '</p><p><strong>Vote:</strong> ' +
+            escapeHtml((data.vote_type || 'yes').toUpperCase()) +
+            '</p><p><strong>Recorded:</strong> ' +
+            escapeHtml(new Date(data.voted_at).toLocaleString()) +
+            '</p></div>';
+        } catch (err) {
+          resultEl.innerHTML =
+            '<div class="status-badge status-closed">' + escapeHtml(err.message) + '</div>';
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Verify Receipt';
+        }
+      }
+    </script>
+  </body>
+</html>
