@@ -244,7 +244,6 @@ async function createAdminUser(adminPassword, adminCode = null) {
 }
 
 async function autoSetup() {
-  try {
     const [tables] = await db.query("SHOW TABLES LIKE 'users'");
     if (tables.length > 0) {
       const [count] = await db.query('SELECT COUNT(*) as cnt FROM users WHERE role = "admin"');
@@ -261,9 +260,6 @@ async function autoSetup() {
     if (adminPassword) {
       await createAdminUser(adminPassword, adminCode);
     }
-  } catch (err) {
-    console.error('Auto-setup error:', err.message);
-  }
 }
 
 async function migrateDB() {
