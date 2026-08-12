@@ -51,5 +51,5 @@ module.exports = {
   escapeHtml,
   isValidUrl,
   sanitizeInput,
-  CODE_CHARS
+  CODE_CHARS,
 };

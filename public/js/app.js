@@ -15,7 +15,7 @@ function toast(msg, type = '') {
   if (!t) return;
   t.textContent = msg;
   t.className = 'toast show ' + type;
-  setTimeout(() => t.className = 'toast', 3000);
+  setTimeout(() => (t.className = 'toast'), 3000);
 }
 
 async function fetchJSON(url, opts = {}) {
@@ -24,7 +24,9 @@ async function fetchJSON(url, opts = {}) {
     const t = await fetch(API + '/api/csrf-token', { credentials: 'same-origin' });
     const d = await t.json();
     token = d.token;
-  } catch(e) {}
+  } catch {
+    // ignore CSRF token fetch failure
+  }
   const headers = { 'Content-Type': 'application/json', ...opts.headers };
   if (token) headers['X-CSRF-Token'] = token;
   const res = await fetch(API + url, { ...opts, headers, credentials: 'same-origin' });
@@ -35,7 +37,9 @@ async function fetchJSON(url, opts = {}) {
 
 function showLoading(selector) {
   const el = document.querySelector(selector);
-  if (el) el.innerHTML = '<div class="loading-placeholder"><div class="spinner"></div><p>Loading...</p></div>';
+  if (el)
+    el.innerHTML =
+      '<div class="loading-placeholder"><div class="spinner"></div><p>Loading...</p></div>';
 }
 
 async function logout() {
@@ -53,8 +57,12 @@ function setAuthLinks(u, opts) {
   }
   var prefix = opts.prefix || '';
   var label = u.role === 'admin' ? 'Admin' : 'Voter';
-  var adminLink = (u.role === 'admin' && !opts.hideAdmin) ? ' <a href="/admin">Admin</a>' : '';
-  el.innerHTML = '<span style="opacity:0.8;">' + escapeHtml(prefix + label) + '</span> <a href="#" onclick="logout()" class="btn btn-sm btn-outline" style="color:white;border-color:rgba(255,255,255,0.4);">Logout</a>' + adminLink;
+  var adminLink = u.role === 'admin' && !opts.hideAdmin ? ' <a href="/admin">Admin</a>' : '';
+  el.innerHTML =
+    '<span style="opacity:0.8;">' +
+    escapeHtml(prefix + label) +
+    '</span> <a href="#" onclick="logout()" class="btn btn-sm btn-outline" style="color:white;border-color:rgba(255,255,255,0.4);">Logout</a>' +
+    adminLink;
 }
 
 function toggleDark() {
@@ -71,13 +79,15 @@ function loadTheme() {
 function connectWebSocket(onMessage) {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(protocol + '//' + location.host);
-  ws.onmessage = function(event) {
+  ws.onmessage = function (event) {
     try {
       const data = JSON.parse(event.data);
       if (onMessage) onMessage(data);
-    } catch (e) { /* silent */ }
+    } catch (e) {
+      /* silent */
+    }
   };
-  ws.onclose = function() {
+  ws.onclose = function () {
     setTimeout(() => connectWebSocket(onMessage), 3000);
   };
   return ws;
@@ -89,10 +99,15 @@ function showModal(html) {
     overlay = document.createElement('div');
     overlay.id = 'modal-overlay';
     overlay.className = 'modal-overlay';
-    overlay.onclick = function(e) { if (e.target === overlay) closeModal(); };
+    overlay.onclick = function (e) {
+      if (e.target === overlay) closeModal();
+    };
     document.body.appendChild(overlay);
   }
-  overlay.innerHTML = '<div class="modal-content"><button class="modal-close" onclick="closeModal()">&times;</button>' + html + '</div>';
+  overlay.innerHTML =
+    '<div class="modal-content"><button class="modal-close" onclick="closeModal()">&times;</button>' +
+    html +
+    '</div>';
   overlay.style.display = 'flex';
 }
 
@@ -110,11 +125,15 @@ async function showCandidateDetail(candidateId) {
       <div class="candidate-photo-large"><img src="${escapeHtml(c.photo)}" alt="${escapeHtml(c.name)}"></div>
       ${c.manifesto ? '<div class="manifesto-full">' + escapeHtml(c.manifesto) + '</div>' : '<p style="color:var(--gray);font-style:italic;">No manifesto provided.</p>'}
     `);
-  } catch (err) { toast('Failed to load candidate details', 'error'); }
+  } catch (err) {
+    toast('Failed to load candidate details', 'error');
+  }
 }
 
 function closeModalOnEsc() {
-  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeModal();
+  });
 }
 
 function togglePassword(id) {
@@ -131,7 +150,7 @@ function togglePassword(id) {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   loadTheme();
   closeModalOnEsc();
   var nav = document.querySelector('.nav-inner');
@@ -139,7 +158,9 @@ document.addEventListener('DOMContentLoaded', function() {
     var hb = nav.querySelector('.hamburger');
     var nl = nav.querySelector('.nav-links');
     if (hb && nl) {
-      hb.addEventListener('click', function() { nl.classList.toggle('open'); });
+      hb.addEventListener('click', function () {
+        nl.classList.toggle('open');
+      });
     }
   }
 });

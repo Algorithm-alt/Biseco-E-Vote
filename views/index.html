@@ -1,208 +1,252 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BISECO Prefectorial Election</title>
-  <link rel="icon" type="image/png" href="/images/logo.png">
-  <link rel="stylesheet" href="/css/style.css">
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#0044cc">
-</head>
-<body>
-  <div id="announcement-banner"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BISECO Prefectorial Election</title>
+    <link rel="icon" type="image/png" href="/images/logo.png" />
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0044cc" />
+  </head>
+  <body>
+    <div id="announcement-banner"></div>
 
-  <nav>
-    <div class="container nav-inner">
-      <a href="/" class="logo">
-        <img src="/images/logo.png" alt="BISECO" style="height:45px;">
-        <span class="logo-text">BISECO<br><small>Prefectorial Election</small></span>
-      </a>
-      <button class="hamburger" aria-label="Menu" onclick="document.querySelector('.nav-links').classList.toggle('open')">
-        <span></span><span></span><span></span>
-      </button>
-      <div class="nav-links" id="nav-links">
-        <a href="/">Home</a>
-        <a href="/results">Results</a>
-        <span id="auth-links"></span>
-        <button class="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode"></button>
-      </div>
-    </div>
-  </nav>
-
-  <section class="hero">
-    <div class="hero-particles">
-      <div class="particle"></div><div class="particle"></div><div class="particle"></div>
-      <div class="particle"></div><div class="particle"></div><div class="particle"></div>
-      <div class="particle"></div><div class="particle"></div>
-    </div>
-    <div class="container hero-content">
-      <img src="/images/logo.png" alt="BISECO Crest" class="hero-logo">
-      <h1>BISECO Prefectorial Election</h1>
-      <p class="hero-subtitle">Bisease Senior High School</p>
-      <p class="hero-motto">"Mbodzembo Wie Nkunyimdzi"</p>
-      <div id="election-status" class="election-status">
-        <div class="loading-placeholder"><div class="spinner"></div></div>
-      </div>
-      <div id="election-countdown"></div>
-      <div class="hero-buttons" id="hero-buttons"></div>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container">
-      <h2 class="section-title">How It Works</h2>
-      <div class="steps-grid">
-        <div class="step-card">
-          <div class="step-number">1</div>
-          <h3>Get Your Code</h3>
-          <p>Receive your unique voting code from the admin</p>
-        </div>
-        <div class="step-card">
-          <div class="step-number">2</div>
-          <h3>Login</h3>
-          <p>Enter your voting code to access the ballot</p>
-        </div>
-        <div class="step-card">
-          <div class="step-number">3</div>
-          <h3>Vote</h3>
-          <p>Select your preferred candidate for each position</p>
-        </div>
-        <div class="step-card">
-          <div class="step-number">4</div>
-          <h3>Results</h3>
-          <p>View live results after the election closes</p>
+    <nav>
+      <div class="container nav-inner">
+        <a href="/" class="logo">
+          <img src="/images/logo.png" alt="BISECO" style="height: 45px" />
+          <span class="logo-text">BISECO<br /><small>Prefectorial Election</small></span>
+        </a>
+        <button class="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+        <div class="nav-links" id="nav-links">
+          <a href="/">Home</a>
+          <a href="/results">Results</a>
+          <span id="auth-links"></span>
+          <button class="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode"></button>
         </div>
       </div>
-    </div>
-  </section>
+    </nav>
 
-  <section class="section section-dark">
-    <div class="container">
-      <h2 class="section-title">About The Election</h2>
-      <div class="about-grid">
-        <div class="about-card">
-          <h3>The Pacesetters</h3>
-          <p>The BISECO Prefectorial Election empowers every student to choose their representatives. Your voice matters. Your vote counts.</p>
+    <section class="hero">
+      <div class="hero-particles">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+      </div>
+      <div class="container hero-content">
+        <img src="/images/logo.png" alt="BISECO Crest" class="hero-logo" />
+        <h1>BISECO Prefectorial Election</h1>
+        <p class="hero-subtitle">Bisease Senior High School</p>
+        <p class="hero-motto">"Mbodzembo Wie Nkunyimdzi"</p>
+        <div id="election-status" class="election-status">
+          <div class="loading-placeholder"><div class="spinner"></div></div>
         </div>
-        <div class="about-card">
-          <h3>Fair & Anonymous</h3>
-          <p>All votes are anonymous. The system ensures no one can trace your vote back to you. Vote with confidence.</p>
-        </div>
-        <div class="about-card">
-          <h3>Transparent Results</h3>
-          <p>Results are tallied in real-time and displayed publicly once the election closes. Every vote is counted.</p>
+        <div id="election-countdown"></div>
+        <div class="hero-buttons" id="hero-buttons"></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <h2 class="section-title">How It Works</h2>
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-number">1</div>
+            <h3>Get Your Code</h3>
+            <p>Receive your unique voting code from the admin</p>
+          </div>
+          <div class="step-card">
+            <div class="step-number">2</div>
+            <h3>Login</h3>
+            <p>Enter your voting code to access the ballot</p>
+          </div>
+          <div class="step-card">
+            <div class="step-number">3</div>
+            <h3>Vote</h3>
+            <p>Select your preferred candidate for each position</p>
+          </div>
+          <div class="step-card">
+            <div class="step-number">4</div>
+            <h3>Results</h3>
+            <p>View live results after the election closes</p>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <footer>
-    <div class="container">
-      <div class="footer-bottom">
-        &copy; 2026 Bisease Senior High School (BISECO). All rights reserved | Developed by <a href="https://wa.link/h9xelb" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">Algorithm Web Services</a><br>
-        <small>Motto: Mbodzembo Wie Nkunyimdzi | The Pacesetters</small>
+    <section class="section section-dark">
+      <div class="container">
+        <h2 class="section-title">About The Election</h2>
+        <div class="about-grid">
+          <div class="about-card">
+            <h3>The Pacesetters</h3>
+            <p>
+              The BISECO Prefectorial Election empowers every student to choose their
+              representatives. Your voice matters. Your vote counts.
+            </p>
+          </div>
+          <div class="about-card">
+            <h3>Fair & Anonymous</h3>
+            <p>
+              All votes are anonymous. The system ensures no one can trace your vote back to you.
+              Vote with confidence.
+            </p>
+          </div>
+          <div class="about-card">
+            <h3>Transparent Results</h3>
+            <p>
+              Results are tallied in real-time and displayed publicly once the election closes.
+              Every vote is counted.
+            </p>
+          </div>
+        </div>
       </div>
-    </div>
-  </footer>
+    </section>
 
-  <div class="toast" id="toast"></div>
-  <script src="/js/app.js"></script>
-  <script>
-    let countdownInterval = null;
+    <footer>
+      <div class="container">
+        <div class="footer-bottom">
+          &copy; 2026 Bisease Senior High School (BISECO). All rights reserved | Developed by
+          <a
+            href="https://wa.link/h9xelb"
+            target="_blank"
+            rel="noopener"
+            style="color: var(--accent); text-decoration: none"
+            >Algorithm Web Services</a
+          ><br />
+          <small>Motto: Mbodzembo Wie Nkunyimdzi | The Pacesetters</small>
+        </div>
+      </div>
+    </footer>
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      try {
-        const user = await fetchJSON('/api/auth/me');
-        setAuthLinks(user, { prefix: '' });
-      } catch(e) {
-        setAuthLinks(null);
-      }
-      loadElectionStatus();
-      loadAnnouncements();
-      connectWebSocket(onWSMessage);
-      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-    });
+    <div class="toast" id="toast"></div>
+    <script src="/js/app.js"></script>
+    <script>
+      let countdownInterval = null;
 
-    function onWSMessage(data) {
-      if (data.type === 'vote_cast') loadElectionStatus();
-    }
-
-    async function loadAnnouncements() {
-      try {
-        const items = await fetchJSON('/api/announcements/active');
-        const banner = document.getElementById('announcement-banner');
-        if (items.length > 0) {
-          const a = items[0];
-          banner.innerHTML = '<div class="announcement-banner ' + escapeHtml(a.priority) + '"><strong>' + escapeHtml(a.title) + '</strong>' + (a.content ? ' - ' + escapeHtml(a.content) : '') + '<button onclick="this.parentElement.remove()">&times;</button></div>';
-        }
-      } catch(e) {}
-    }
-
-    async function loadElectionStatus() {
-      const el = document.getElementById('election-status');
-      const btns = document.getElementById('hero-buttons');
-      const cdEl = document.getElementById('election-countdown');
-      try {
-        const election = await fetchJSON('/api/votes/active-election');
-        if (!election) {
-          el.innerHTML = '<div class="status-badge status-closed">No Active Election</div>';
-          btns.innerHTML = '';
-          cdEl.innerHTML = '';
-          if (countdownInterval) clearInterval(countdownInterval);
-          return;
-        }
-        el.innerHTML = '<div class="status-badge status-active">Election Active</div><h2 style="margin-top:15px;">' + escapeHtml(election.name) + '</h2>' + (election.description ? '<p>' + escapeHtml(election.description) + '</p>' : '');
-
-        if (election.end_date) {
-          startCountdown(new Date(election.end_date), cdEl);
-        } else {
-          cdEl.innerHTML = '';
-        }
-
+      document.addEventListener('DOMContentLoaded', async () => {
         try {
           const user = await fetchJSON('/api/auth/me');
-          if (user.role === 'voter') {
-            if (user.has_voted) {
-              btns.innerHTML = '<div class="status-badge status-voted">You Have Voted</div>';
-            } else {
-              btns.innerHTML = '<a href="/ballot" class="btn btn-secondary btn-lg">Cast Your Vote</a>';
-            }
-          } else if (user.role === 'admin') {
-            btns.innerHTML = '<a href="/admin" class="btn btn-secondary btn-lg">Admin Dashboard</a>';
-          }
-        } catch(e) {
-          btns.innerHTML = '<a href="/login" class="btn btn-secondary btn-lg">Login to Vote</a>';
+          setAuthLinks(user, { prefix: '' });
+        } catch (e) {
+          setAuthLinks(null);
         }
-      } catch(e) {
-        el.innerHTML = '<div class="status-badge status-closed">Unable to load election status</div>';
-      }
-    }
+        loadElectionStatus();
+        loadAnnouncements();
+        connectWebSocket(onWSMessage);
+        if ('serviceWorker' in navigator)
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
 
-    function startCountdown(endDate, container) {
-      if (countdownInterval) clearInterval(countdownInterval);
-      function update() {
-        const now = new Date();
-        const diff = endDate - now;
-        if (diff <= 0) {
-          container.innerHTML = '<div class="status-badge status-closed">Election Ended</div>';
-          clearInterval(countdownInterval);
-          return;
-        }
-        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const s = Math.floor((diff % (1000 * 60)) / 1000);
-        container.innerHTML = '<div class="countdown">' +
-          '<div class="countdown-unit"><span class="countdown-value">' + d + '</span><span class="countdown-label">Days</span></div>' +
-          '<div class="countdown-unit"><span class="countdown-value">' + h + '</span><span class="countdown-label">Hours</span></div>' +
-          '<div class="countdown-unit"><span class="countdown-value">' + m + '</span><span class="countdown-label">Minutes</span></div>' +
-          '<div class="countdown-unit"><span class="countdown-value">' + s + '</span><span class="countdown-label">Seconds</span></div>' +
-          '</div>';
+      function onWSMessage(data) {
+        if (data.type === 'vote_cast') loadElectionStatus();
       }
-      update();
-      countdownInterval = setInterval(update, 1000);
-    }
-  </script>
-</body>
+
+      async function loadAnnouncements() {
+        try {
+          const items = await fetchJSON('/api/announcements/active');
+          const banner = document.getElementById('announcement-banner');
+          if (items.length > 0) {
+            const a = items[0];
+            banner.innerHTML =
+              '<div class="announcement-banner ' +
+              escapeHtml(a.priority) +
+              '"><strong>' +
+              escapeHtml(a.title) +
+              '</strong>' +
+              (a.content ? ' - ' + escapeHtml(a.content) : '') +
+              '<button onclick="this.parentElement.remove()">&times;</button></div>';
+          }
+        } catch (e) {}
+      }
+
+      async function loadElectionStatus() {
+        const el = document.getElementById('election-status');
+        const btns = document.getElementById('hero-buttons');
+        const cdEl = document.getElementById('election-countdown');
+        try {
+          const election = await fetchJSON('/api/votes/active-election');
+          if (!election) {
+            el.innerHTML = '<div class="status-badge status-closed">No Active Election</div>';
+            btns.innerHTML = '';
+            cdEl.innerHTML = '';
+            if (countdownInterval) clearInterval(countdownInterval);
+            return;
+          }
+          el.innerHTML =
+            '<div class="status-badge status-active">Election Active</div><h2 style="margin-top:15px;">' +
+            escapeHtml(election.name) +
+            '</h2>' +
+            (election.description ? '<p>' + escapeHtml(election.description) + '</p>' : '');
+
+          if (election.end_date) {
+            startCountdown(new Date(election.end_date), cdEl);
+          } else {
+            cdEl.innerHTML = '';
+          }
+
+          try {
+            const user = await fetchJSON('/api/auth/me');
+            if (user.role === 'voter') {
+              const status = await fetchJSON('/api/votes/status');
+              if (status.has_voted) {
+                btns.innerHTML = '<div class="status-badge status-voted">You Have Voted</div>';
+              } else {
+                btns.innerHTML =
+                  '<a href="/ballot" class="btn btn-secondary btn-lg">Cast Your Vote</a>';
+              }
+            } else if (user.role === 'admin') {
+              btns.innerHTML =
+                '<a href="/admin" class="btn btn-secondary btn-lg">Admin Dashboard</a>';
+            }
+          } catch (e) {
+            btns.innerHTML = '<a href="/login" class="btn btn-secondary btn-lg">Login to Vote</a>';
+          }
+        } catch (e) {
+          el.innerHTML =
+            '<div class="status-badge status-closed">Unable to load election status</div>';
+        }
+      }
+
+      function startCountdown(endDate, container) {
+        if (countdownInterval) clearInterval(countdownInterval);
+        function update() {
+          const now = new Date();
+          const diff = endDate - now;
+          if (diff <= 0) {
+            container.innerHTML = '<div class="status-badge status-closed">Election Ended</div>';
+            clearInterval(countdownInterval);
+            return;
+          }
+          const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+          const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const s = Math.floor((diff % (1000 * 60)) / 1000);
+          container.innerHTML =
+            '<div class="countdown">' +
+            '<div class="countdown-unit"><span class="countdown-value">' +
+            d +
+            '</span><span class="countdown-label">Days</span></div>' +
+            '<div class="countdown-unit"><span class="countdown-value">' +
+            h +
+            '</span><span class="countdown-label">Hours</span></div>' +
+            '<div class="countdown-unit"><span class="countdown-value">' +
+            m +
+            '</span><span class="countdown-label">Minutes</span></div>' +
+            '<div class="countdown-unit"><span class="countdown-value">' +
+            s +
+            '</span><span class="countdown-label">Seconds</span></div>' +
+            '</div>';
+        }
+        update();
+        countdownInterval = setInterval(update, 1000);
+      }
+    </script>
+  </body>
 </html>

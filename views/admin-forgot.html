@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forgot Password - BISECO Election</title>
+    <link rel="icon" type="image/png" href="/images/logo.png" />
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0044cc" />
+  </head>
+  <body>
+    <nav>
+      <div class="container nav-inner">
+        <a href="/" class="logo">
+          <img src="/images/logo.png" alt="BISECO" style="height: 45px" />
+          <span class="logo-text">BISECO<br /><small>Prefectorial Election</small></span>
+        </a>
+        <div class="nav-links">
+          <a href="/admin/login">Back to Login</a>
+          <button class="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode"></button>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section">
+      <div class="container">
+        <div class="auth-card">
+          <img src="/images/logo.png" alt="BISECO" class="auth-logo" />
+          <h2>Forgot Password</h2>
+          <p class="auth-subtitle">
+            Enter the email on your admin account and we'll send you a reset link
+          </p>
+          <form id="forgot-form" onsubmit="handleForgot(event)">
+            <div class="form-group">
+              <label for="email">Admin Email</label>
+              <input
+                type="email"
+                id="email"
+                placeholder="Enter your email"
+                required
+                autocomplete="email"
+              />
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="forgot-btn">
+              <span id="forgot-btn-text">Send Reset Link</span>
+              <span id="forgot-btn-loading" style="display:none;"><span class="spinner" style="width:18px;height:18px;border-width:2px;vertical-align:middle;margin-right:6px;"></span>Sending...</span>
+            </button>
+          </form>
+          <p style="text-align: center; margin-top: 15px">
+            <a href="/admin/login" style="color: var(--accent)">Back to Login</a>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="container">
+        <div class="footer-bottom">
+          &copy; 2026 Bisease Senior High School (BISECO). All rights reserved
+        </div>
+      </div>
+    </footer>
+
+    <div class="toast" id="toast"></div>
+    <script src="/js/app.js"></script>
+    <script>
+      function setLoading(on) {
+        var t = document.getElementById('forgot-btn-text');
+        var l = document.getElementById('forgot-btn-loading');
+        var b = document.getElementById('forgot-btn');
+        if (t) t.style.display = on ? 'none' : '';
+        if (l) l.style.display = on ? '' : 'none';
+        if (b) b.disabled = on;
+      }
+      async function handleForgot(e) {
+        e.preventDefault();
+        var emailVal = document.getElementById('email').value.trim();
+        setLoading(true);
+        try {
+          var data = await fetchJSON('/api/auth/admin/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email: emailVal })
+          });
+          var displayEmail = data.email || emailVal;
+          document.getElementById('forgot-form').innerHTML =
+            '<div class="status-badge status-voted" style="font-size:16px;margin-bottom:12px;">Reset link sent</div>' +
+            '<p style="color:var(--text-primary);margin-bottom:8px;">A password reset link has been sent to <strong>' + escapeHtml(displayEmail) + '</strong>.</p>' +
+            '<p style="color:var(--text-secondary);font-size:14px;margin-bottom:20px;">Check your inbox and click the link to set a new password. The link expires in <strong>1 hour</strong>.</p>' +
+            '<p style="color:var(--text-secondary);font-size:13px;background:var(--bg-secondary);padding:10px 14px;border-radius:6px;">Don\'t see the email? Check your <strong>spam / junk folder</strong>.</p>' +
+            '<div style="margin-top:20px;text-align:center;"><a href="/admin/login" class="btn btn-secondary">Back to Login</a></div>';
+        } catch(err) {
+          setLoading(false);
+          var errMsg = err.message || 'An unexpected error occurred. Please try again.';
+          document.getElementById('forgot-form').innerHTML =
+            '<div style="text-align:center;">' +
+            '<h3 style="color:var(--danger);margin-bottom:8px;">' + escapeHtml(errMsg) + '</h3>' +
+            '<div style="margin-top:10px;"><a href="/admin/forgot-password" class="btn btn-primary">Try Again</a> &nbsp; <a href="/admin/login" class="btn btn-secondary">Back to Login</a></div>' +
+            '</div>';
+        }
+      }
+    </script>
+  </body>
+</html>

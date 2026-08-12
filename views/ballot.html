@@ -1,161 +1,276 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cast Your Vote - BISECO Election</title>
-  <link rel="icon" type="image/png" href="/images/logo.png">
-  <link rel="stylesheet" href="/css/style.css">
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#0044cc">
-</head>
-<body>
-  <nav>
-    <div class="container nav-inner">
-      <a href="/" class="logo">
-        <img src="/images/logo.png" alt="BISECO" style="height:45px;">
-        <span class="logo-text">BISECO<br><small>Prefectorial Election</small></span>
-      </a>
-      <div class="nav-links">
-        <a href="/">Home</a>
-        <span id="auth-links"></span>
-        <button class="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode"></button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cast Your Vote - BISECO Election</title>
+    <link rel="icon" type="image/png" href="/images/logo.png" />
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0044cc" />
+  </head>
+  <body>
+    <nav>
+      <div class="container nav-inner">
+        <a href="/" class="logo">
+          <img src="/images/logo.png" alt="BISECO" style="height: 45px" />
+          <span class="logo-text">BISECO<br /><small>Prefectorial Election</small></span>
+        </a>
+        <div class="nav-links">
+          <a href="/">Home</a>
+          <span id="auth-links"></span>
+          <button class="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode"></button>
+        </div>
       </div>
-    </div>
-  </nav>
+    </nav>
 
-  <section class="section">
-    <div class="container">
-      <div id="ballot-container">
-        <div class="loading-placeholder"><div class="spinner"></div><p>Loading ballot...</p></div>
+    <section class="section">
+      <div class="container">
+        <div id="ballot-container">
+          <div class="loading-placeholder">
+            <div class="spinner"></div>
+            <p>Loading ballot...</p>
+          </div>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <footer>
-    <div class="container">
-      <div class="footer-bottom">&copy; 2026 Bisease Senior High School (BISECO). All rights reserved</div>
-    </div>
-  </footer>
+    <footer>
+      <div class="container">
+        <div class="footer-bottom">
+          &copy; 2026 Bisease Senior High School (BISECO). All rights reserved
+        </div>
+      </div>
+    </footer>
 
-  <div class="toast" id="toast"></div>
-  <script src="/js/app.js"></script>
-  <script>
-    let currentUser = null;
-    let activeElection = null;
-    let positions = [];
-    let selectedVotes = {};
-    let countdownInterval = null;
+    <div class="toast" id="toast"></div>
+    <script src="/js/app.js"></script>
+    <script>
+      let currentUser = null;
+      let activeElection = null;
+      let positions = [];
+      let selectedVotes = {};
+      let countdownInterval = null;
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      try {
-        currentUser = await fetchJSON('/api/auth/me');
-        if (currentUser.role !== 'voter') { window.location.href = currentUser.role === 'admin' ? '/admin' : '/login'; return; }
-        setAuthLinks(currentUser, { prefix: '' });
-        if (currentUser.has_voted) {
-          document.getElementById('ballot-container').innerHTML = '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2>Already Voted</h2><p>You have already cast your vote in this election.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
+      document.addEventListener('DOMContentLoaded', async () => {
+        try {
+          currentUser = await fetchJSON('/api/auth/me');
+          if (currentUser.role !== 'voter') {
+            window.location.href = currentUser.role === 'admin' ? '/admin' : '/login';
+            return;
+          }
+          setAuthLinks(currentUser, { prefix: '' });
+        } catch (e) {
+          window.location.href = '/login';
           return;
         }
-      } catch(e) { window.location.href = '/login'; return; }
 
-      try {
-        activeElection = await fetchJSON('/api/votes/active-election');
-        if (!activeElection) {
-          document.getElementById('ballot-container').innerHTML = '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2>No Active Election</h2><p>There is no election currently in progress.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
-          return;
+        try {
+          activeElection = await fetchJSON('/api/votes/active-election');
+          if (!activeElection) {
+            document.getElementById('ballot-container').innerHTML =
+              '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2>No Active Election</h2><p>There is no election currently in progress.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
+            return;
+          }
+          const status = await fetchJSON('/api/votes/status');
+          if (status.has_voted) {
+            document.getElementById('ballot-container').innerHTML =
+              '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2>Already Voted</h2><p>You have already cast your vote in this election.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
+            return;
+          }
+          positions = await fetchJSON('/api/votes/positions/' + activeElection.id);
+          renderBallot();
+          if (activeElection.end_date) startBallotCountdown(new Date(activeElection.end_date));
+        } catch (e) {
+          document.getElementById('ballot-container').innerHTML =
+            '<p style="text-align:center;color:var(--danger);">Failed to load ballot.</p>';
         }
-        positions = await fetchJSON('/api/votes/positions/' + activeElection.id);
-        renderBallot();
-        if (activeElection.end_date) startBallotCountdown(new Date(activeElection.end_date));
-      } catch(e) {
-        document.getElementById('ballot-container').innerHTML = '<p style="text-align:center;color:var(--danger);">Failed to load ballot.</p>';
-      }
-    });
-
-    function renderBallot() {
-      const container = document.getElementById('ballot-container');
-      let html = '<div class="ballot-header"><img src="' + escapeHtml(activeElection.logo_url || '/images/logo.png') + '" alt="BISECO" style="height:60px;"><h2>' + escapeHtml(activeElection.name) + '</h2><p>Select a candidate for each position you wish to vote on. You may skip any position. Single-candidate positions require a YES or NO vote.</p><div id="ballot-countdown"></div><div class="ballot-progress"><span id="progress-text">0</span>/' + positions.filter(p => p.candidates.length > 0).length + ' positions selected</div></div>';
-
-      positions.forEach(pos => {
-        html += '<div class="position-section"><h3 class="position-title">' + escapeHtml(pos.name) + '</h3>' + (pos.description ? '<p class="position-desc">' + escapeHtml(pos.description) + '</p>' : '');
-        if (pos.candidates.length === 1) {
-          const c = pos.candidates[0];
-          html += '<div class="single-candidate-card"><div class="candidate-photo"><img src="' + escapeHtml(c.photo) + '" alt="' + escapeHtml(c.name) + '"></div><div class="candidate-info"><h4>' + escapeHtml(c.name) + '</h4>' + (c.manifesto ? '<p class="manifesto-preview">' + escapeHtml(c.manifesto.substring(0, 120)) + (c.manifesto.length > 120 ? '...' : '') + '</p>' : '') + '<span class="candidate-detail-btn" onclick="showCandidateDetail(' + c.id + ')">View Full Profile</span></div></div><div class="yesno-buttons" id="yesno-' + pos.id + '"><button class="btn btn-yes" id="yes-' + pos.id + '" onclick="selectYesNo(' + pos.id + ',' + c.id + ',\'yes\')">YES</button><button class="btn btn-no" id="no-' + pos.id + '" onclick="selectYesNo(' + pos.id + ',' + c.id + ',\'no\')">NO</button></div>';
-        } else {
-          html += '<div class="candidates-grid">';
-          pos.candidates.forEach(c => {
-            html += '<div class="candidate-card" id="candidate-' + pos.id + '-' + c.id + '" onclick="selectCandidate(' + pos.id + ',' + c.id + ')"><div class="candidate-photo"><img src="' + escapeHtml(c.photo) + '" alt="' + escapeHtml(c.name) + '"></div><div class="candidate-info"><h4>' + escapeHtml(c.name) + '</h4>' + (c.manifesto ? '<p class="manifesto-preview">' + escapeHtml(c.manifesto.substring(0, 120)) + (c.manifesto.length > 120 ? '...' : '') + '</p>' : '') + '<span class="candidate-detail-btn" onclick="event.stopPropagation();showCandidateDetail(' + c.id + ')">View Full Profile</span></div><div class="check-mark">&#10003;</div></div>';
-          });
-          if (pos.candidates.length === 0) html += '<p style="color:var(--text-secondary);padding:20px;">No candidates yet for this position.</p>';
-          html += '</div>';
-        }
-        html += '</div>';
       });
 
-      html += '<div class="ballot-footer"><button class="btn btn-primary btn-lg" id="submit-vote-btn" onclick="submitVotes()" disabled>Submit Vote</button></div>';
-      container.innerHTML = html;
-    }
+      function renderBallot() {
+        const container = document.getElementById('ballot-container');
+        let html =
+          '<div class="ballot-header"><img src="' +
+          escapeHtml(activeElection.logo_url || '/images/logo.png') +
+          '" alt="BISECO" style="height:60px;"><h2>' +
+          escapeHtml(activeElection.name) +
+          '</h2><p>Select a candidate for each position you wish to vote on. You may skip any position. Single-candidate positions require a YES or NO vote.</p><div id="ballot-countdown"></div><div class="ballot-progress"><span id="progress-text">0</span>/' +
+          positions.filter((p) => p.candidates.length > 0).length +
+          ' positions selected</div></div>';
 
-    function selectCandidate(positionId, candidateId) {
-      const el = document.getElementById('candidate-' + positionId + '-' + candidateId);
-      if (el.classList.contains('selected')) {
-        el.classList.remove('selected');
-        delete selectedVotes[positionId];
-      } else {
-        document.querySelectorAll('[id^="candidate-' + positionId + '-"]').forEach(e => e.classList.remove('selected'));
-        el.classList.add('selected');
-        selectedVotes[positionId] = { candidate_id: candidateId, vote_type: 'yes' };
-      }
-      document.getElementById('progress-text').textContent = Object.keys(selectedVotes).length;
-      document.getElementById('submit-vote-btn').disabled = Object.keys(selectedVotes).length === 0;
-    }
-
-    function selectYesNo(positionId, candidateId, voteType) {
-      const btn = document.getElementById(voteType + '-' + positionId);
-      if (btn.classList.contains('selected')) {
-        btn.classList.remove('selected');
-        delete selectedVotes[positionId];
-      } else {
-        document.getElementById('yes-' + positionId).classList.remove('selected');
-        document.getElementById('no-' + positionId).classList.remove('selected');
-        btn.classList.add('selected');
-        selectedVotes[positionId] = { candidate_id: candidateId, vote_type: voteType };
-      }
-      document.getElementById('progress-text').textContent = Object.keys(selectedVotes).length;
-      document.getElementById('submit-vote-btn').disabled = Object.keys(selectedVotes).length === 0;
-    }
-
-    async function submitVotes() {
-      const voteArray = Object.entries(selectedVotes).map(([position_id, v]) => ({
-        position_id: parseInt(position_id), candidate_id: v.candidate_id, vote_type: v.vote_type
-      }));
-      if (voteArray.length === 0) { toast('Please select at least one candidate', 'error'); return; }
-      if (!confirm('Are you sure you want to submit your vote? This action cannot be undone.')) return;
-      const btn = document.getElementById('submit-vote-btn');
-      btn.disabled = true; btn.textContent = 'Submitting...';
-      try {
-        const data = await fetchJSON('/api/votes/cast', {
-          method: 'POST', body: JSON.stringify({ election_id: activeElection.id, votes: voteArray })
+        positions.forEach((pos) => {
+          html +=
+            '<div class="position-section"><h3 class="position-title">' +
+            escapeHtml(pos.name) +
+            '</h3>' +
+            (pos.description
+              ? '<p class="position-desc">' + escapeHtml(pos.description) + '</p>'
+              : '');
+          if (pos.candidates.length === 1) {
+            const c = pos.candidates[0];
+            html +=
+              '<div class="single-candidate-card"><div class="candidate-photo"><img src="' +
+              escapeHtml(c.photo) +
+              '" alt="' +
+              escapeHtml(c.name) +
+              '"></div><div class="candidate-info"><h4>' +
+              escapeHtml(c.name) +
+              '</h4>' +
+              (c.manifesto
+                ? '<p class="manifesto-preview">' +
+                  escapeHtml(c.manifesto.substring(0, 120)) +
+                  (c.manifesto.length > 120 ? '...' : '') +
+                  '</p>'
+                : '') +
+              '<span class="candidate-detail-btn" onclick="showCandidateDetail(' +
+              c.id +
+              ')">View Full Profile</span></div></div><div class="yesno-buttons" id="yesno-' +
+              pos.id +
+              '"><button class="btn btn-yes" id="yes-' +
+              pos.id +
+              '" onclick="selectYesNo(' +
+              pos.id +
+              ',' +
+              c.id +
+              ',\'yes\')">YES</button><button class="btn btn-no" id="no-' +
+              pos.id +
+              '" onclick="selectYesNo(' +
+              pos.id +
+              ',' +
+              c.id +
+              ",'no')\">NO</button></div>";
+          } else {
+            html += '<div class="candidates-grid">';
+            pos.candidates.forEach((c) => {
+              html +=
+                '<div class="candidate-card" id="candidate-' +
+                pos.id +
+                '-' +
+                c.id +
+                '" onclick="selectCandidate(' +
+                pos.id +
+                ',' +
+                c.id +
+                ')"><div class="candidate-photo"><img src="' +
+                escapeHtml(c.photo) +
+                '" alt="' +
+                escapeHtml(c.name) +
+                '"></div><div class="candidate-info"><h4>' +
+                escapeHtml(c.name) +
+                '</h4>' +
+                (c.manifesto
+                  ? '<p class="manifesto-preview">' +
+                    escapeHtml(c.manifesto.substring(0, 120)) +
+                    (c.manifesto.length > 120 ? '...' : '') +
+                    '</p>'
+                  : '') +
+                '<span class="candidate-detail-btn" onclick="event.stopPropagation();showCandidateDetail(' +
+                c.id +
+                ')">View Full Profile</span></div><div class="check-mark">&#10003;</div></div>';
+            });
+            if (pos.candidates.length === 0)
+              html +=
+                '<p style="color:var(--text-secondary);padding:20px;">No candidates yet for this position.</p>';
+            html += '</div>';
+          }
+          html += '</div>';
         });
-        document.getElementById('ballot-container').innerHTML = '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2 style="color:var(--success);">Vote Submitted!</h2><p>Thank you for participating in the BISECO Prefectorial Election.</p><p style="margin-top:10px;color:var(--text-secondary);">Your vote has been recorded anonymously.</p><a href="/" class="btn btn-primary" style="margin-top:20px;">Back to Home</a></div>';
-      } catch(err) {
-        toast(err.message, 'error');
-        btn.disabled = false; btn.textContent = 'Submit Vote';
-      }
-    }
 
-    function startBallotCountdown(endDate) {
-      const container = document.getElementById('ballot-countdown');
-      if (!container) return;
-      function update() {
-        const diff = endDate - new Date();
-        if (diff <= 0) { container.innerHTML = '<div class="status-badge status-closed">Election Ended</div>'; clearInterval(countdownInterval); return; }
-        const d = Math.floor(diff / 86400000); const h = Math.floor((diff % 86400000) / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000); const s = Math.floor((diff % 60000) / 1000);
-        container.innerHTML = '<div class="countdown"><div class="countdown-unit"><span class="countdown-value">' + d + '</span><span class="countdown-label">Days</span></div><div class="countdown-unit"><span class="countdown-value">' + h + '</span><span class="countdown-label">Hrs</span></div><div class="countdown-unit"><span class="countdown-value">' + m + '</span><span class="countdown-label">Min</span></div><div class="countdown-unit"><span class="countdown-value">' + s + '</span><span class="countdown-label">Sec</span></div></div>';
+        html +=
+          '<div class="ballot-footer"><button class="btn btn-primary btn-lg" id="submit-vote-btn" onclick="submitVotes()" disabled>Submit Vote</button></div>';
+        container.innerHTML = html;
       }
-      update(); countdownInterval = setInterval(update, 1000);
-    }
-  </script>
-</body>
+
+      function selectCandidate(positionId, candidateId) {
+        const el = document.getElementById('candidate-' + positionId + '-' + candidateId);
+        if (el.classList.contains('selected')) {
+          el.classList.remove('selected');
+          delete selectedVotes[positionId];
+        } else {
+          document
+            .querySelectorAll('[id^="candidate-' + positionId + '-"]')
+            .forEach((e) => e.classList.remove('selected'));
+          el.classList.add('selected');
+          selectedVotes[positionId] = { candidate_id: candidateId, vote_type: 'yes' };
+        }
+        document.getElementById('progress-text').textContent = Object.keys(selectedVotes).length;
+        document.getElementById('submit-vote-btn').disabled =
+          Object.keys(selectedVotes).length === 0;
+      }
+
+      function selectYesNo(positionId, candidateId, voteType) {
+        const btn = document.getElementById(voteType + '-' + positionId);
+        if (btn.classList.contains('selected')) {
+          btn.classList.remove('selected');
+          delete selectedVotes[positionId];
+        } else {
+          document.getElementById('yes-' + positionId).classList.remove('selected');
+          document.getElementById('no-' + positionId).classList.remove('selected');
+          btn.classList.add('selected');
+          selectedVotes[positionId] = { candidate_id: candidateId, vote_type: voteType };
+        }
+        document.getElementById('progress-text').textContent = Object.keys(selectedVotes).length;
+        document.getElementById('submit-vote-btn').disabled =
+          Object.keys(selectedVotes).length === 0;
+      }
+
+      async function submitVotes() {
+        const voteArray = Object.entries(selectedVotes).map(([position_id, v]) => ({
+          position_id: parseInt(position_id),
+          candidate_id: v.candidate_id,
+          vote_type: v.vote_type,
+        }));
+        if (voteArray.length === 0) {
+          toast('Please select at least one candidate', 'error');
+          return;
+        }
+        if (!confirm('Are you sure you want to submit your vote? This action cannot be undone.'))
+          return;
+        const btn = document.getElementById('submit-vote-btn');
+        btn.disabled = true;
+        btn.textContent = 'Submitting...';
+        try {
+          const data = await fetchJSON('/api/votes/cast', {
+            method: 'POST',
+            body: JSON.stringify({ election_id: activeElection.id, votes: voteArray }),
+          });
+          document.getElementById('ballot-container').innerHTML =
+            '<div class="auth-card" style="text-align:center;"><img src="/images/logo.png" alt="BISECO" class="auth-logo"><h2 style="color:var(--success);">Vote Submitted!</h2><p>Thank you for participating in the BISECO Prefectorial Election.</p><p style="margin-top:10px;color:var(--text-secondary);">Your vote has been recorded anonymously.</p><p><a href="/" class="btn btn-primary" style="margin-top:10px;">Back to Home</a></p></div>';
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+          btn.textContent = 'Submit Vote';
+        }
+      }
+
+      function startBallotCountdown(endDate) {
+        const container = document.getElementById('ballot-countdown');
+        if (!container) return;
+        function update() {
+          const diff = endDate - new Date();
+          if (diff <= 0) {
+            container.innerHTML = '<div class="status-badge status-closed">Election Ended</div>';
+            clearInterval(countdownInterval);
+            return;
+          }
+          const d = Math.floor(diff / 86400000);
+          const h = Math.floor((diff % 86400000) / 3600000);
+          const m = Math.floor((diff % 3600000) / 60000);
+          const s = Math.floor((diff % 60000) / 1000);
+          container.innerHTML =
+            '<div class="countdown"><div class="countdown-unit"><span class="countdown-value">' +
+            d +
+            '</span><span class="countdown-label">Days</span></div><div class="countdown-unit"><span class="countdown-value">' +
+            h +
+            '</span><span class="countdown-label">Hrs</span></div><div class="countdown-unit"><span class="countdown-value">' +
+            m +
+            '</span><span class="countdown-label">Min</span></div><div class="countdown-unit"><span class="countdown-value">' +
+            s +
+            '</span><span class="countdown-label">Sec</span></div></div>';
+        }
+        update();
+        countdownInterval = setInterval(update, 1000);
+      }
+    </script>
+  </body>
 </html>

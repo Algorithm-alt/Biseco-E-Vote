@@ -12,16 +12,22 @@ const adminAuth = (req, res, next) => {
 
 router.get('/active', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM announcements WHERE is_active = 1 ORDER BY priority DESC, created_at DESC');
+    const [rows] = await db.query(
+      'SELECT * FROM announcements WHERE is_active = 1 ORDER BY priority DESC, created_at DESC'
+    );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/', adminAuth, async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM announcements ORDER BY created_at DESC');
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/', adminAuth, async (req, res) => {
@@ -38,7 +44,9 @@ router.post('/', adminAuth, async (req, res) => {
       [sanitizedTitle, sanitizedContent, sanitizedPriority]
     );
     res.json({ success: true, id: result.insertId });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/:id', adminAuth, async (req, res) => {
@@ -58,7 +66,9 @@ router.put('/:id', adminAuth, async (req, res) => {
       [sanitizedTitle, sanitizedContent, sanitizedActive, sanitizedPriority, annId]
     );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.delete('/:id', adminAuth, async (req, res) => {
@@ -67,7 +77,9 @@ router.delete('/:id', adminAuth, async (req, res) => {
     if (isNaN(annId)) return res.status(400).json({ error: 'Invalid announcement ID' });
     await db.query('DELETE FROM announcements WHERE id = ?', [annId]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 module.exports = router;

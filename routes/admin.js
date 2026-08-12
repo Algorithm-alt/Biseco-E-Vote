@@ -11,7 +11,7 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, 'candidate-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + ext);
-  }
+  },
 });
 const upload = multer({
   storage,
@@ -22,7 +22,7 @@ const upload = multer({
     const allowedExts = ['.jpeg', '.jpg', '.png', '.gif', '.webp'];
     if (allowedExts.includes(ext) && allowedMimes.includes(file.mimetype)) return cb(null, true);
     cb(new Error('Only image files allowed'));
-  }
+  },
 });
 
 const adminAuth = (req, res, next) => {
@@ -34,36 +34,52 @@ const adminAuth = (req, res, next) => {
 
 async function logAudit(adminId, adminCode, action, details, ip) {
   try {
-    await db.query('INSERT INTO audit_logs (admin_id, admin_code, action, details, ip_address) VALUES (?, ?, ?, ?, ?)',
-      [adminId, adminCode, action, (details || '').substring(0, 1000), ip || null]);
-  } catch (e) { /* silent */ }
+    await db.query(
+      'INSERT INTO audit_logs (admin_id, admin_code, action, details, ip_address) VALUES (?, ?, ?, ?, ?)',
+      [adminId, adminCode, action, (details || '').substring(0, 1000), ip || null]
+    );
+  } catch (e) {
+    /* silent */
+  }
 }
 
 router.get('/stats', adminAuth, async (req, res) => {
   try {
     const [voters] = await db.query("SELECT COUNT(*) as count FROM users WHERE role = 'voter'");
-    const [voted] = await db.query("SELECT COUNT(*) as count FROM users WHERE role = 'voter' AND has_voted = 1");
+    const [voted] = await db.query('SELECT COUNT(DISTINCT voter_hash) as count FROM votes');
     const [elections] = await db.query('SELECT COUNT(*) as count FROM elections');
-    const [activeElections] = await db.query("SELECT COUNT(*) as count FROM elections WHERE status = 'active'");
+    const [activeElections] = await db.query(
+      "SELECT COUNT(*) as count FROM elections WHERE status = 'active'"
+    );
     const [positions] = await db.query('SELECT COUNT(*) as count FROM positions');
-    const [candidates] = await db.query('SELECT COUNT(*) as count FROM candidates c JOIN positions p ON c.position_id = p.id JOIN elections e ON p.election_id = e.id WHERE e.status = \'active\'');
+    const [candidates] = await db.query(
+      "SELECT COUNT(*) as count FROM candidates c JOIN positions p ON c.position_id = p.id JOIN elections e ON p.election_id = e.id WHERE e.status = 'active'"
+    );
     const [totalVotes] = await db.query('SELECT COUNT(*) as count FROM votes');
     res.json({
-      voters: voters[0].count, voted: voted[0].count,
+      voters: voters[0].count,
+      voted: voted[0].count,
       turnout: voters[0].count > 0 ? Math.round((voted[0].count / voters[0].count) * 100) : 0,
-      elections: elections[0].count, active_elections: activeElections[0].count,
-      positions: positions[0].count, candidates: candidates[0].count, total_votes: totalVotes[0].count
+      elections: elections[0].count,
+      active_elections: activeElections[0].count,
+      positions: positions[0].count,
+      candidates: candidates[0].count,
+      total_votes: totalVotes[0].count,
     });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/generate-codes', adminAuth, async (req, res) => {
   try {
     const { count } = req.body;
-    if (!count || count < 1 || count > 1000) return res.status(400).json({ error: 'Enter a number between 1 and 1000' });
+    if (!count || count < 1 || count > 1000)
+      return res.status(400).json({ error: 'Enter a number between 1 and 1000' });
     const codes = [];
     for (let i = 0; i < count; i++) {
-      let code, unique = false;
+      let code,
+        unique = false;
       while (!unique) {
         code = generateCode(8);
         const [exists] = await db.query('SELECT id FROM users WHERE code = ?', [code]);
@@ -72,17 +88,26 @@ router.post('/generate-codes', adminAuth, async (req, res) => {
       await db.query('INSERT INTO users (code, role) VALUES (?, ?)', [code, 'voter']);
       codes.push(code);
     }
-    await logAudit(req.session.user.id, req.session.user.code, 'generate_codes', `Generated ${count} codes`, req.ip);
+    await logAudit(
+      req.session.user.id,
+      req.session.user.code,
+      'generate_codes',
+      `Generated ${count} codes`,
+      req.ip
+    );
     res.json({ success: true, count: codes.length, codes });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/bulk-import-codes', adminAuth, async (req, res) => {
   try {
     const csvData = (req.body.csvData || '').toString().trim();
     if (!csvData) return res.status(400).json({ error: 'CSV data required' });
-    const lines = csvData.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length > 5000) return res.status(400).json({ error: 'Maximum 5000 codes per import' });
+    const lines = csvData.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length > 5000)
+      return res.status(400).json({ error: 'Maximum 5000 codes per import' });
     const codes = [];
     for (const line of lines) {
       const trimmed = sanitizeInput(line, 10);
@@ -94,35 +119,66 @@ router.post('/bulk-import-codes', adminAuth, async (req, res) => {
         codes.push(trimmed);
       }
     }
-    await logAudit(req.session.user.id, req.session.user.code, 'bulk_import', `Imported ${codes.length} codes from CSV`, req.ip);
+    await logAudit(
+      req.session.user.id,
+      req.session.user.code,
+      'bulk_import',
+      `Imported ${codes.length} codes from CSV`,
+      req.ip
+    );
     res.json({ success: true, count: codes.length, codes });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/elections', adminAuth, async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM elections ORDER BY created_at DESC');
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/elections', adminAuth, async (req, res) => {
   try {
-    const { name, description, start_date, end_date, logo_url, primary_color, secondary_color } = req.body;
+    const { name, description, start_date, end_date, logo_url, primary_color, secondary_color } =
+      req.body;
     const sanitizedName = sanitizeInput(name, 200);
     if (!sanitizedName) return res.status(400).json({ error: 'Election name is required' });
     const sanitizedDesc = sanitizeInput(description, 2000);
-    const sanitizedLogo = logo_url ? (isValidUrl(logo_url) ? sanitizeInput(logo_url, 500) : null) : null;
+    const sanitizedLogo = logo_url
+      ? isValidUrl(logo_url)
+        ? sanitizeInput(logo_url, 500)
+        : null
+      : null;
     const sanitizedPrimary = primary_color ? sanitizeInput(primary_color, 7) : null;
     const sanitizedSecondary = secondary_color ? sanitizeInput(secondary_color, 7) : null;
 
     const [result] = await db.query(
       'INSERT INTO elections (name, description, start_date, end_date, logo_url, primary_color, secondary_color) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [sanitizedName, sanitizedDesc, start_date || null, end_date || null, sanitizedLogo, sanitizedPrimary, sanitizedSecondary]
+      [
+        sanitizedName,
+        sanitizedDesc,
+        start_date || null,
+        end_date || null,
+        sanitizedLogo,
+        sanitizedPrimary,
+        sanitizedSecondary,
+      ]
     );
-    await logAudit(req.session.user.id, req.session.user.code, 'create_election', `Created election: ${sanitizedName}`, req.ip);
+    await logAudit(
+      req.session.user.id,
+      req.session.user.code,
+      'create_election',
+      `Created election: ${sanitizedName}`,
+      req.ip
+    );
     res.json({ success: true, id: result.insertId });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/elections/:id', adminAuth, async (req, res) => {
@@ -130,20 +186,42 @@ router.put('/elections/:id', adminAuth, async (req, res) => {
     const electionId = parseInt(req.params.id);
     if (isNaN(electionId)) return res.status(400).json({ error: 'Invalid election ID' });
 
-    const { name, description, start_date, end_date, logo_url, primary_color, secondary_color } = req.body;
+    const { name, description, start_date, end_date, logo_url, primary_color, secondary_color } =
+      req.body;
     const sanitizedName = name ? sanitizeInput(name, 200) : null;
     const sanitizedDesc = description ? sanitizeInput(description, 2000) : null;
-    const sanitizedLogo = logo_url ? (isValidUrl(logo_url) ? sanitizeInput(logo_url, 500) : null) : null;
+    const sanitizedLogo = logo_url
+      ? isValidUrl(logo_url)
+        ? sanitizeInput(logo_url, 500)
+        : null
+      : null;
     const sanitizedPrimary = primary_color ? sanitizeInput(primary_color, 7) : null;
     const sanitizedSecondary = secondary_color ? sanitizeInput(secondary_color, 7) : null;
 
     await db.query(
       'UPDATE elections SET name = COALESCE(?, name), description = COALESCE(?, description), start_date = COALESCE(?, start_date), end_date = COALESCE(?, end_date), logo_url = COALESCE(?, logo_url), primary_color = COALESCE(?, primary_color), secondary_color = COALESCE(?, secondary_color) WHERE id = ?',
-      [sanitizedName, sanitizedDesc, start_date, end_date, sanitizedLogo, sanitizedPrimary, sanitizedSecondary, electionId]
+      [
+        sanitizedName,
+        sanitizedDesc,
+        start_date,
+        end_date,
+        sanitizedLogo,
+        sanitizedPrimary,
+        sanitizedSecondary,
+        electionId,
+      ]
     );
-    await logAudit(req.session.user.id, req.session.user.code, 'update_election', `Updated election #${electionId}`, req.ip);
+    await logAudit(
+      req.session.user.id,
+      req.session.user.code,
+      'update_election',
+      `Updated election #${electionId}`,
+      req.ip
+    );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/elections/:id/status', adminAuth, async (req, res) => {
@@ -152,13 +230,22 @@ router.put('/elections/:id/status', adminAuth, async (req, res) => {
     if (isNaN(electionId)) return res.status(400).json({ error: 'Invalid election ID' });
 
     const { status } = req.body;
-    if (!['upcoming', 'active', 'closed'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    if (!['upcoming', 'active', 'closed'].includes(status))
+      return res.status(400).json({ error: 'Invalid status' });
     if (status === 'active') await db.query("UPDATE elections SET status = 'upcoming'");
     await db.query('UPDATE elections SET status = ? WHERE id = ?', [status, electionId]);
     const [el] = await db.query('SELECT name FROM elections WHERE id = ?', [electionId]);
-    await logAudit(req.session.user.id, req.session.user.code, 'election_status', `Set "${el[0]?.name}" to ${status}`, req.ip);
+    await logAudit(
+      req.session.user.id,
+      req.session.user.code,
+      'election_status',
+      `Set "${el[0]?.name}" to ${status}`,
+      req.ip
+    );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/elections/:id/results', adminAuth, async (req, res) => {
@@ -167,12 +254,24 @@ router.put('/elections/:id/results', adminAuth, async (req, res) => {
     if (isNaN(electionId)) return res.status(400).json({ error: 'Invalid election ID' });
 
     const { results_published } = req.body;
-    if (typeof results_published !== 'boolean') return res.status(400).json({ error: 'results_published must be boolean' });
-    await db.query('UPDATE elections SET results_published = ? WHERE id = ?', [results_published ? 1 : 0, electionId]);
+    if (typeof results_published !== 'boolean')
+      return res.status(400).json({ error: 'results_published must be boolean' });
+    await db.query('UPDATE elections SET results_published = ? WHERE id = ?', [
+      results_published ? 1 : 0,
+      electionId,
+    ]);
     const [el] = await db.query('SELECT name FROM elections WHERE id = ?', [electionId]);
-    await logAudit(req.session.user.id, req.session.user.code, 'results_toggle', `${results_published ? 'Published' : 'Unpublished'} results for "${el[0]?.name}"`, req.ip);
+    await logAudit(
+      req.session.user.id,
+      req.session.user.code,
+      'results_toggle',
+      `${results_published ? 'Published' : 'Unpublished'} results for "${el[0]?.name}"`,
+      req.ip
+    );
     res.json({ success: true, results_published });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.delete('/elections/:id', adminAuth, async (req, res) => {
@@ -182,9 +281,17 @@ router.delete('/elections/:id', adminAuth, async (req, res) => {
 
     const [el] = await db.query('SELECT name FROM elections WHERE id = ?', [electionId]);
     await db.query('DELETE FROM elections WHERE id = ?', [electionId]);
-    await logAudit(req.session.user.id, req.session.user.code, 'delete_election', `Deleted election: ${el[0]?.name}`, req.ip);
+    await logAudit(
+      req.session.user.id,
+      req.session.user.code,
+      'delete_election',
+      `Deleted election: ${el[0]?.name}`,
+      req.ip
+    );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/elections/:id/clone', adminAuth, async (req, res) => {
@@ -197,19 +304,37 @@ router.post('/elections/:id/clone', adminAuth, async (req, res) => {
     const orig = el[0];
     const [newEl] = await db.query(
       'INSERT INTO elections (name, description, start_date, end_date, logo_url, primary_color, secondary_color) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [(orig.name || '').substring(0, 190) + ' (Copy)', orig.description, orig.start_date, orig.end_date, orig.logo_url, orig.primary_color, orig.secondary_color]
+      [
+        (orig.name || '').substring(0, 190) + ' (Copy)',
+        orig.description,
+        orig.start_date,
+        orig.end_date,
+        orig.logo_url,
+        orig.primary_color,
+        orig.secondary_color,
+      ]
     );
     const newElectionId = newEl.insertId;
-    const [positions] = await db.query('SELECT * FROM positions WHERE election_id = ?', [electionId]);
+    const [positions] = await db.query('SELECT * FROM positions WHERE election_id = ?', [
+      electionId,
+    ]);
     for (const pos of positions) {
       await db.query(
         'INSERT INTO positions (election_id, name, description, sort_order) VALUES (?, ?, ?, ?)',
         [newElectionId, pos.name, pos.description, pos.sort_order]
       );
     }
-    await logAudit(req.session.user.id, req.session.user.code, 'clone_election', `Cloned election #${electionId} to #${newElectionId}`, req.ip);
+    await logAudit(
+      req.session.user.id,
+      req.session.user.code,
+      'clone_election',
+      `Cloned election #${electionId} to #${newElectionId}`,
+      req.ip
+    );
     res.json({ success: true, id: newElectionId });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/positions/:electionId', adminAuth, async (req, res) => {
@@ -222,7 +347,9 @@ router.get('/positions/:electionId', adminAuth, async (req, res) => {
       [electionId]
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/positions', adminAuth, async (req, res) => {
@@ -230,7 +357,8 @@ router.post('/positions', adminAuth, async (req, res) => {
     const { election_id, name, description, sort_order } = req.body;
     const electionIdInt = parseInt(election_id);
     const sanitizedName = sanitizeInput(name, 100);
-    if (isNaN(electionIdInt) || !sanitizedName) return res.status(400).json({ error: 'Election and name are required' });
+    if (isNaN(electionIdInt) || !sanitizedName)
+      return res.status(400).json({ error: 'Election and name are required' });
     const sanitizedDesc = sanitizeInput(description, 2000);
 
     const [result] = await db.query(
@@ -238,7 +366,9 @@ router.post('/positions', adminAuth, async (req, res) => {
       [electionIdInt, sanitizedName, sanitizedDesc, parseInt(sort_order) || 0]
     );
     res.json({ success: true, id: result.insertId });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/positions/reorder', adminAuth, async (req, res) => {
@@ -253,7 +383,9 @@ router.put('/positions/reorder', adminAuth, async (req, res) => {
       }
     }
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/positions/:id', adminAuth, async (req, res) => {
@@ -267,10 +399,17 @@ router.put('/positions/:id', adminAuth, async (req, res) => {
 
     await db.query(
       'UPDATE positions SET name = COALESCE(?, name), description = COALESCE(?, description), sort_order = COALESCE(?, sort_order) WHERE id = ?',
-      [sanitizedName, sanitizedDesc, sort_order !== undefined && sort_order !== null ? parseInt(sort_order) : null, posId]
+      [
+        sanitizedName,
+        sanitizedDesc,
+        sort_order !== undefined && sort_order !== null ? parseInt(sort_order) : null,
+        posId,
+      ]
     );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.delete('/positions/:id', adminAuth, async (req, res) => {
@@ -279,16 +418,23 @@ router.delete('/positions/:id', adminAuth, async (req, res) => {
     if (isNaN(posId)) return res.status(400).json({ error: 'Invalid position ID' });
     await db.query('DELETE FROM positions WHERE id = ?', [posId]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/candidates/:positionId', adminAuth, async (req, res) => {
   try {
     const posId = parseInt(req.params.positionId);
     if (isNaN(posId)) return res.status(400).json({ error: 'Invalid position ID' });
-    const [rows] = await db.query('SELECT * FROM candidates WHERE position_id = ? ORDER BY sort_order, id', [posId]);
+    const [rows] = await db.query(
+      'SELECT * FROM candidates WHERE position_id = ? ORDER BY sort_order, id',
+      [posId]
+    );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/all-candidates/:electionId', adminAuth, async (req, res) => {
@@ -301,7 +447,9 @@ router.get('/all-candidates/:electionId', adminAuth, async (req, res) => {
       [electionId]
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/candidates', adminAuth, upload.single('photo'), async (req, res) => {
@@ -309,7 +457,8 @@ router.post('/candidates', adminAuth, upload.single('photo'), async (req, res) =
     const { position_id, name, manifesto } = req.body;
     const posId = parseInt(position_id);
     const sanitizedName = sanitizeInput(name, 100);
-    if (isNaN(posId) || !sanitizedName) return res.status(400).json({ error: 'Position and name are required' });
+    if (isNaN(posId) || !sanitizedName)
+      return res.status(400).json({ error: 'Position and name are required' });
     const sanitizedManifesto = sanitizeInput(manifesto, 5000);
     const photo = req.file ? '/uploads/' + req.file.filename : '/images/placeholder.png';
 
@@ -318,7 +467,9 @@ router.post('/candidates', adminAuth, upload.single('photo'), async (req, res) =
       [posId, sanitizedName, photo, sanitizedManifesto]
     );
     res.json({ success: true, id: result.insertId });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/candidates/reorder', adminAuth, async (req, res) => {
@@ -333,7 +484,9 @@ router.put('/candidates/reorder', adminAuth, async (req, res) => {
       }
     }
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/candidates/:id', adminAuth, upload.single('photo'), async (req, res) => {
@@ -357,7 +510,9 @@ router.put('/candidates/:id', adminAuth, upload.single('photo'), async (req, res
       );
     }
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.delete('/candidates/:id', adminAuth, async (req, res) => {
@@ -366,14 +521,20 @@ router.delete('/candidates/:id', adminAuth, async (req, res) => {
     if (isNaN(candId)) return res.status(400).json({ error: 'Invalid candidate ID' });
     await db.query('DELETE FROM candidates WHERE id = ?', [candId]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/voters', adminAuth, async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT id, code, has_voted, created_at FROM users WHERE role = 'voter' ORDER BY created_at DESC");
+    const [rows] = await db.query(
+      "SELECT id, code, has_voted, created_at FROM users WHERE role = 'voter' ORDER BY created_at DESC"
+    );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.delete('/voters/:id', adminAuth, async (req, res) => {
@@ -382,23 +543,32 @@ router.delete('/voters/:id', adminAuth, async (req, res) => {
     if (isNaN(voterId)) return res.status(400).json({ error: 'Invalid voter ID' });
     await db.query('DELETE FROM users WHERE id = ? AND role = ?', [voterId, 'voter']);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.delete('/voters-all', adminAuth, async (req, res) => {
   try {
     await db.query('DELETE FROM users WHERE role = ?', ['voter']);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/voters/:id/access', adminAuth, async (req, res) => {
   try {
     const voterId = parseInt(req.params.id);
     if (isNaN(voterId)) return res.status(400).json({ error: 'Invalid voter ID' });
-    const [rows] = await db.query('SELECT election_id FROM voter_election_access WHERE voter_id = ?', [voterId]);
-    res.json(rows.map(r => r.election_id));
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+    const [rows] = await db.query(
+      'SELECT election_id FROM voter_election_access WHERE voter_id = ?',
+      [voterId]
+    );
+    res.json(rows.map((r) => r.election_id));
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/voters/:id/access', adminAuth, async (req, res) => {
@@ -412,25 +582,34 @@ router.post('/voters/:id/access', adminAuth, async (req, res) => {
       for (const elId of election_ids) {
         const elIdInt = parseInt(elId);
         if (!isNaN(elIdInt)) {
-          await db.query('INSERT IGNORE INTO voter_election_access (voter_id, election_id) VALUES (?, ?)', [voterId, elIdInt]);
+          await db.query(
+            'INSERT IGNORE INTO voter_election_access (voter_id, election_id) VALUES (?, ?)',
+            [voterId, elIdInt]
+          );
         }
       }
     }
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-router.get('/vote-logs/:electionId', adminAuth, async (req, res) => {
+router.get('/vote-turnout/:electionId', adminAuth, async (req, res) => {
   try {
     const electionId = parseInt(req.params.electionId);
     if (isNaN(electionId)) return res.status(400).json({ error: 'Invalid election ID' });
 
     const [rows] = await db.query(
-      `SELECT DISTINCT v.voter_hash as code, v.created_at as voted_at, GROUP_CONCAT(DISTINCT v.vote_type) as vote_types FROM votes v WHERE v.election_id = ? GROUP BY v.voter_hash, v.created_at ORDER BY v.created_at DESC`,
+      `SELECT DISTINCT v.voter_hash as code, v.created_at as voted_at
+       FROM votes v WHERE v.election_id = ?
+       ORDER BY v.created_at DESC`,
       [electionId]
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/export-results/:electionId', adminAuth, async (req, res) => {
@@ -440,7 +619,10 @@ router.get('/export-results/:electionId', adminAuth, async (req, res) => {
 
     const [election] = await db.query('SELECT * FROM elections WHERE id = ?', [electionId]);
     if (election.length === 0) return res.status(404).json({ error: 'Election not found' });
-    const [positions] = await db.query('SELECT * FROM positions WHERE election_id = ? ORDER BY sort_order, id', [electionId]);
+    const [positions] = await db.query(
+      'SELECT * FROM positions WHERE election_id = ? ORDER BY sort_order, id',
+      [electionId]
+    );
     const results = [];
     for (const pos of positions) {
       const [candidates] = await db.query(
@@ -457,21 +639,51 @@ router.get('/export-results/:electionId', adminAuth, async (req, res) => {
       }
     }
     res.json({ election: election[0].name, header, rows });
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/profile', adminAuth, async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT id, code, totp_enabled, created_at FROM users WHERE id = ?', [req.session.user.id]);
+    const [rows] = await db.query(
+      'SELECT id, code, email, totp_enabled, created_at FROM users WHERE id = ?',
+      [req.session.user.id]
+    );
     res.json(rows[0]);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/profile', adminAuth, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (typeof email !== 'string') return res.status(400).json({ error: 'Email is required' });
+
+    const trimmedEmail = sanitizeInput(email, 255);
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    await db.query('UPDATE users SET email = ? WHERE id = ?', [trimmedEmail, req.session.user.id]);
+    db.query(
+      'INSERT INTO audit_logs (admin_id, admin_code, action, details, ip_address) VALUES (?, ?, ?, ?, ?)',
+      [req.session.user.id, req.session.user.code, 'email_updated', trimmedEmail, req.ip]
+    ).catch(() => {});
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/audit-logs', adminAuth, async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 200');
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 module.exports = router;
