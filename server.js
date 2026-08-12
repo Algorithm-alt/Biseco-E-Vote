@@ -261,15 +261,6 @@ app.use('/api/votes', require('./routes/votes'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/announcements', require('./routes/announcements'));
 
-app.get('/health', async (req, res) => {
-  try {
-    await db.query('SELECT 1');
-    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-  } catch (err) {
-    res.status(503).json({ status: 'unhealthy', error: err.message });
-  }
-});
-
 app.post('/api/setup', async (req, res) => {
   try {
     const { autoSetup } = require('./config/migrate');
@@ -278,6 +269,17 @@ app.post('/api/setup', async (req, res) => {
   } catch (err) {
     console.error('Manual setup failed:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.use('/api', csrfProtect);
+
+app.get('/health', async (req, res) => {
+  try {
+    await db.query('SELECT 1');
+    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({ status: 'unhealthy', error: err.message });
   }
 });
 
